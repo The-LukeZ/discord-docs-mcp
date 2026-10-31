@@ -151,6 +151,10 @@ export function extractEntities(units: SectionUnit[], sections: ParsedSection[])
         } else if (lastEndpoint && /Params/.test(heading)) {
           (lastEndpoint as ParsedEndpoint).params.push({ name: heading, columns: table.columns, rows: table.rows } satisfies ParamTable);
         } else {
+          // A legend table (its first column is a non-key column of the preceding table under the same
+          // heading, e.g. the "Channel Type (Abbreviated)" key under Bitwise Permission Flags) is not an enum.
+          const prev = out.enums.at(-1);
+          if (prev && prev.name === heading && prev.columns.slice(1).includes(table.columns[0])) continue;
           out.enums.push({ name: heading, sectionId, ownerObject: owner, columns: table.columns, rows: table.rows });
         }
       } catch (e) {

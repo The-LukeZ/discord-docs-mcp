@@ -319,7 +319,7 @@ export async function lookupObjectTool(db: D1Database, cfg: Config, input: { nam
         const notes = f.footnotes.length > 0 ? ` [${f.footnotes.map((n) => oneLine(n, 200)).join("; ")}]` : "";
         return `- \`${f.name}\` (${f.type}${flags ? `; ${flags}` : ""})${f.description ? `: ${oneLine(f.description, 400)}` : ""}${notes}`;
       });
-      const enums = (await findRelatedEnums(db, info.id, o.name)).filter((e) => {
+      const enums = (await findRelatedEnums(db, info.id, o.name, baseId(o.sectionId).split("#")[0])).filter((e) => {
         const k = `${e.name} ${baseId(e.sectionId)}`;
         return !listed.has(k) && listed.add(k);
       });

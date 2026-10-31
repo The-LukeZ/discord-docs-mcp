@@ -73,6 +73,24 @@ describe("splitSections", () => {
     expect(big.length).toBeGreaterThan(1);
     for (const x of big) expect(x.markdown.length).toBeLessThanOrEqual(1000 + 40);
   });
+  it("repeats the table header and delimiter rows in every part of a split table", async () => {
+    const rows = Array.from({ length: 200 }, (_, i) => `| field_${i} | string | ${"desc ".repeat(8)}|`).join("\n");
+    const s = await splitSections(tree(`## Big\n\n| Field | Type | Description |\n| --- | --- | --- |\n${rows}`), page, { splitChars: 6000 });
+    const big = s.filter((x) => x.baseId === "p#big");
+    expect(big.length).toBeGreaterThan(1);
+    for (const x of big) {
+      // every run of pipe lines starts with the header row and a delimiter row
+      const runs = x.markdown.split(/\n{2,}/).filter((b) => b.startsWith("|"));
+      expect(runs.length).toBeGreaterThan(0);
+      for (const run of runs) {
+        const [h, d] = run.split("\n");
+        expect(h).toMatch(/^\|\s*Field\s*\|/);
+        expect(d).toMatch(/^\|\s*:?-{3,}/);
+      }
+    }
+    const all = big.map((x) => x.markdown).join("\n");
+    for (let i = 0; i < 200; i++) expect(all).toContain(`field_${i} `);
+  });
   it("hard-cuts a single huge line", async () => {
     const s = await splitSections(tree(`## Big\n\n${"z".repeat(5000)}`), page, { splitChars: 1000 });
     for (const x of s.filter((y) => y.baseId === "p#big")) expect(x.markdown.length).toBeLessThanOrEqual(1040);

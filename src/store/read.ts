@@ -440,15 +440,29 @@ export async function listEnumNames(db: D1Database, snapshotId: number): Promise
   return res.results.map((r) => ({ name: r.name, sectionId: r.section_id }));
 }
 
-/** Enums owned by the object `objectName` or whose name starts with it ("Channel Flags" for "Channel"), page order. */
-export async function findRelatedEnums(db: D1Database, snapshotId: number, objectName: string, limit = 30): Promise<EnumRow[]> {
+/**
+ * Enums owned by the object `objectName`, plus enums on the object's own page (`pagePath`) whose name starts
+ * with it ("Channel Flags" for "Channel"), page order. The name-prefix match is page-scoped so that unrelated
+ * tables elsewhere ("Channel Pins Update Event Fields") are not listed.
+ */
+export async function findRelatedEnums(
+  db: D1Database,
+  snapshotId: number,
+  objectName: string,
+  pagePath: string,
+  limit = 30,
+): Promise<EnumRow[]> {
   const res = await db
     .prepare(
       `SELECT name, section_id, owner_object, columns, rows FROM enums
-       WHERE snapshot_id = ?1 AND (lower(owner_object) = lower(?2) OR substr(lower(name), 1, length(?2) + 1) = lower(?2) || ' ')
+       WHERE snapshot_id = ?1 AND (
+         lower(owner_object) = lower(?2)
+         OR (substr(lower(name), 1, length(?2) + 1) = lower(?2) || ' '
+             AND (section_id = ?4 OR substr(section_id, 1, length(?4) + 1) IN (?4 || '#', ?4 || '~')))
+       )
        ORDER BY rowid LIMIT ?3`,
     )
-    .bind(snapshotId, objectName, limit)
+    .bind(snapshotId, objectName, limit, pagePath)
     .all<Row>();
   return res.results.map((r) => ({
     name: r.name,

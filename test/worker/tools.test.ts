@@ -346,6 +346,13 @@ describe("lookup_object", () => {
     expectEnvelope(r);
   });
 
+  it("related enums are owned by the object or on its own page", async () => {
+    const r = await lookupObjectTool(env.DB, cfg, { name: "channel" });
+    for (const name of ["Channel Types", "Video Quality Modes", "Channel Flags", "Sort Order Types", "Forum Layout Types"]) expect(r.text).toContain(name);
+    expect(r.text).not.toContain("Channel Pins Update Event Fields");
+    expect(r.text).not.toContain("linked-channels");
+  });
+
   it("strips a trailing Object or Structure from the query", async () => {
     for (const name of ["Channel Object", "channel structure", "CHANNEL OBJECT"]) {
       const r = await lookupObjectTool(env.DB, cfg, { name });
@@ -385,6 +392,12 @@ describe("lookup_enum", () => {
     expect(r.text).toContain("Bitwise Permission Flags");
     expect(r.text).toContain(`${DOCS}topics/permissions`);
     expectEnvelope(r);
+  });
+
+  it("does not return the channel type legend as a second permission table", async () => {
+    const r = await lookupEnumTool(env.DB, cfg, { name: "Permission Flags" });
+    expect(count(r.text, /^## Bitwise Permission Flags/gm)).toBe(1);
+    expect(r.text).not.toContain("Abbreviated) | Description | Channel Types");
   });
 
   it("exact name keeps original columns and owner", async () => {

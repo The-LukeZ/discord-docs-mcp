@@ -74,6 +74,13 @@ function fenceAfter(state: Fence | null, lines: string[]): Fence | null {
   return state;
 }
 
+/** Header and delimiter rows of a GFM table block, or [] when the block is not a table. */
+function tableHead(lines: string[]): string[] {
+  const isTable =
+    lines.length > 2 && /^\s*\|/.test(lines[0]) && /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/.test(lines[1]);
+  return isTable ? lines.slice(0, 2) : [];
+}
+
 /**
  * Split an oversized block's markdown into pieces of at most ~max chars (plus a small fence allowance).
  * Prefers blank lines, then single newlines, then a hard cut inside a line. A piece that ends inside a
@@ -92,7 +99,9 @@ function splitText(text: string, max: number): string[] {
   let state: Fence | null = null; // fence open at the start of the current piece
   let cur: string[] = [];
   let len = 0;
-  const open = (): string[] => (state ? [state.marker + state.info] : []);
+  // A table piece without its header and delimiter rows renders as plain text, so repeat them.
+  const head = tableHead(lines);
+  const open = (): string[] => (state ? [state.marker + state.info] : out.length > 0 ? [...head] : []);
   const emit = (piece: string[]): void => {
     const end = fenceAfter(state, piece);
     out.push([...piece, ...(end ? [end.marker] : [])].join("\n"));
