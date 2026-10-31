@@ -168,8 +168,8 @@ export async function runRefresh(deps: RefreshDeps, opts: { runId: string; force
           await cleanup(db, now());
         });
         phase("cleanup");
-      } catch {
-        log("refresh.cleanup_failed", { runId, commitSha: h.sha });
+      } catch (e) {
+        log("refresh.cleanup_failed", { runId, commitSha: h.sha, error: errorText(e) });
       }
     }
 
@@ -187,10 +187,10 @@ export async function runRefresh(deps: RefreshDeps, opts: { runId: string; force
   } catch (err) {
     try {
       await step.do("record-failure", () => recordFailure(deps, runId, force, head, err));
-    } catch {
-      log("refresh.record_failure_failed", { runId, commitSha: head?.sha ?? null });
+    } catch (e) {
+      log("refresh.record_failure_failed", { runId, commitSha: head?.sha ?? null, error: errorText(e) });
     }
-    log("refresh.failed", { runId, commitSha: head?.sha ?? null });
+    log("refresh.failed", { runId, commitSha: head?.sha ?? null, error: errorText(err) });
     throw err;
   }
 }

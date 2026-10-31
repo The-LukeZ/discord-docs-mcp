@@ -368,8 +368,28 @@ describe("runRefresh", () => {
     const lines = logSpy.mock.calls.map((c) => JSON.parse(String(c[0])) as Record<string, unknown>);
     expect(lines.map((l) => l.event)).toEqual(expect.arrayContaining(["refresh.step", "refresh.done", "refresh.failed"]));
     const allowed = new Set(["event", "runId", "commitSha", "step", "outcome", "durationMs", "files", "downloads", "parse", "copy", "pages", "sections",
-      "filesChanged", "sectionsAdded", "sectionsModified", "sectionsRemoved"]);
+      "filesChanged", "sectionsAdded", "sectionsModified", "sectionsRemoved", "error"]);
     for (const l of lines) for (const k of Object.keys(l)) expect(allowed).toContain(k);
+    const failed = lines.find((l) => l.event === "refresh.failed")!;
+    expect(failed.error).toBe(`github raw 503 ${GUILD}`);
+  });
+
+  it("logs the error text when cleanup fails after a publish, and the run still succeeds", { timeout: SLOW }, async () => {
+    const failingCleanup: StepRunner = { do: (name, fn) => (name === "cleanup" ? Promise.reject(new Error("cleanup boom\nsecond line")) : fn()) };
+    const s = await runRefresh(deps, { runId: "r1", force: false }, failingCleanup);
+    expect(s.outcome).toBe("published");
+    const lines = logSpy.mock.calls.map((c) => JSON.parse(String(c[0])) as Record<string, unknown>);
+    expect(lines.find((l) => l.event === "refresh.cleanup_failed")).toMatchObject({ runId: "r1", error: "cleanup boom" });
+  });
+
+  it("logs the error text when recording a failure itself fails", { timeout: SLOW }, async () => {
+    await baseline();
+    gh.commit({ [GUILD]: "x" });
+    gh.failRaw = true;
+    const failingRecord: StepRunner = { do: (name, fn) => (name === "record-failure" ? Promise.reject(new Error("record boom")) : fn()) };
+    await expect(runRefresh(deps, { runId: "r2", force: false }, failingRecord)).rejects.toThrow(`github raw 503 ${GUILD}`);
+    const lines = logSpy.mock.calls.map((c) => JSON.parse(String(c[0])) as Record<string, unknown>);
+    expect(lines.find((l) => l.event === "refresh.record_failure_failed")).toMatchObject({ runId: "r2", error: "record boom" });
   });
 
   it("calls only the stable step names, each once", { timeout: SLOW }, async () => {
