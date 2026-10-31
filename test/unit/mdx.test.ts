@@ -53,6 +53,17 @@ describe("cleanMdx", () => {
     expect(r.tree.children.some((n) => n.type === "manualAnchor" && n.id === "foo")).toBe(true);
     expect(toMarkdown(r.tree)).not.toContain("foo");
   });
+  it("hoists a ManualAnchor inside a heading to a block before it", () => {
+    const r = cleanMdx('###### JSON <ManualAnchor id="x-json" />\n\ntext\n', ctx);
+    expect(r.tree.children.map((n) => n.type)).toEqual(["manualAnchor", "heading", "paragraph"]);
+    expect(toMarkdown(r.tree)).toBe("###### JSON\n\ntext\n");
+  });
+  it("preserves Update tags and rss on the H2 node", () => {
+    const src = '<Update label="October 30, 2026" tags={["HTTP API", "Gateway"]} rss={{\n  title: "T",\n  description: "It\'s D"\n}}>\n\nBody\n\n</Update>';
+    const h = cleanMdx(src, ctx).tree.children[0] as any;
+    expect(h.type).toBe("heading");
+    expect(h.data.update).toEqual({ label: "October 30, 2026", tags: ["HTTP API", "Gateway"], rssTitle: "T", rssDescription: "It's D" });
+  });
   it("renders titled components, images and expressions", () => {
     const md = toMarkdown(cleanMdx('<Card title="Hi" href="/x">Body</Card>\n\n<img src="a.png" alt="Logo" />\n\n<img src="b.png" alt="" />\n\n{"literal"} {1 + 1}', ctx).tree);
     expect(md).toContain("**Hi**");
@@ -69,15 +80,28 @@ describe("corpus smoke", () => {
     const snippets = new Map<string, string>();
     for (const [p, s] of Object.entries(files)) if (p.startsWith("snippets/")) snippets.set(p, s);
     let fallbacks = 0;
+    const srcAnchors = new Set<string>();
+    const outAnchors = new Set<string>();
+    let firstUpdate: any;
     for (const [p, src] of Object.entries(files)) {
       if (!p.startsWith("developers/") || !p.endsWith(".mdx")) continue;
       const r = cleanMdx(src, { pagePath: p.replace(/^developers\//, "").replace(/\.mdx$/, ""), snippets });
       if (r.problems.some((x) => x.startsWith("mdx parse failed"))) fallbacks++;
+      for (const m of src.matchAll(/<ManualAnchor\s+id="([^"]*)"/g)) srcAnchors.add(m[1]!);
+      const walk = (n: any) => {
+        if (n.type === "manualAnchor") outAnchors.add(n.id);
+        if (n.data?.update && p === "developers/change-log.mdx") firstUpdate ??= n.data.update;
+        n.children?.forEach(walk);
+      };
+      walk(r.tree);
       // no JSX or imports outside code: strip fenced and inline code first
       const bare = toMarkdown(r.tree).replace(/```[\s\S]*?```/g, "").replace(/`[^`\n]*`/g, "");
       expect(bare, p).not.toMatch(/^import .* from /m);
       expect(bare, p).not.toMatch(/<\/?(Route|Update|Card|Note|Info|Warning|Tip|Danger|ManualAnchor|Accordion|Step)\b/);
     }
     expect(fallbacks).toBe(0);
+    expect(outAnchors).toEqual(srcAnchors);
+    expect(firstUpdate.tags.length).toBeGreaterThan(0);
+    expect(firstUpdate.rssTitle).toBeTruthy();
   }, 30_000);
 });

@@ -8,7 +8,7 @@ import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { parse as parseYaml } from "yaml";
 import { pageUrl } from "./navigation";
-import type { CleanResult, Frontmatter } from "./types";
+import type { CleanResult, Frontmatter, UpdateMeta } from "./types";
 
 export interface CleanContext {
   pagePath: string;
@@ -49,6 +49,37 @@ const plainProcessor = unified().use(remarkParse).use(remarkFrontmatter, ["yaml"
 function attr(el: N, name: string): string | undefined {
   const a = (el.attributes as N[]).find((x) => x.type === "mdxJsxAttribute" && x.name === name);
   return typeof a?.value === "string" ? a.value : undefined;
+}
+
+/** Evaluate a literal-only estree node (strings, numbers, booleans, null, arrays, objects). No code execution. */
+function evalLiteral(n: N | null | undefined): unknown {
+  if (!n) return undefined;
+  switch (n.type) {
+    case "Literal":
+      return n.value;
+    case "TemplateLiteral":
+      return n.expressions.length === 0 ? n.quasis.map((q: N) => q.value.cooked).join("") : undefined;
+    case "ArrayExpression":
+      return n.elements.map((e: N | null) => evalLiteral(e));
+    case "ObjectExpression": {
+      const o: Record<string, unknown> = {};
+      for (const p of n.properties as N[]) {
+        if (p.type !== "Property" || p.computed) continue;
+        const k = p.key.type === "Identifier" ? p.key.name : p.key.value;
+        o[String(k)] = evalLiteral(p.value);
+      }
+      return o;
+    }
+    default:
+      return undefined;
+  }
+}
+
+/** Value of an expression attribute like tags={[...]} via the estree remark-mdx attaches. */
+function jsxExpr(el: N, name: string): unknown {
+  const a = (el.attributes as N[]).find((x) => x.type === "mdxJsxAttribute" && x.name === name);
+  const stmt = a?.value?.data?.estree?.body?.[0];
+  return stmt?.type === "ExpressionStatement" ? evalLiteral(stmt.expression) : undefined;
 }
 
 function textOf(n: N): string {
@@ -122,10 +153,21 @@ const strong = (text: string): N => ({ type: "strong", children: [{ type: "text"
 function children(parent: N, doc: Doc): N[] {
   const out = (parent.children as N[]).flatMap((c) => transformNode(c, doc));
   if (INLINE_PARENTS.has(parent.type)) {
-    // phrasing-only parent: flatten paragraphs, drop blocks (e.g. manual anchors)
-    return out.flatMap((n) => (n.type === "paragraph" ? n.children : PHRASING.has(n.type) ? [n] : []));
+    // phrasing-only parent: flatten paragraphs, drop blocks; keep anchor markers so the caller can hoist them
+    return out.flatMap((n) => (n.type === "paragraph" ? n.children : PHRASING.has(n.type) || n.type === "manualAnchor" ? [n] : []));
   }
   return out;
+}
+
+function trimEnd(kids: N[]): N[] {
+  const last = kids.filter((k) => k.type !== "manualAnchor").at(-1);
+  return last?.type === "text" ? kids.map((k) => (k === last ? { ...k, value: k.value.trimEnd() } : k)) : kids;
+}
+
+/** Anchor markers inside inline/heading/table content move to sibling blocks placed BEFORE the container. */
+function withHoistedAnchors(node: N, kids: N[]): N[] {
+  const anchors = kids.filter((k) => k.type === "manualAnchor");
+  return [...anchors, { ...node, children: kids.filter((k) => k.type !== "manualAnchor") }];
 }
 
 function transformNode(n: N, doc: Doc): N[] {
@@ -146,16 +188,17 @@ function transformNode(n: N, doc: Doc): N[] {
     case "image":
       return imageNote(n.alt);
     case "link":
-      return [{ ...n, url: rewriteUrl(n.url, doc.shared), children: children(n, doc) }];
+      return withHoistedAnchors({ ...n, url: rewriteUrl(n.url, doc.shared) }, children(n, doc));
     case "definition":
       return [{ ...n, url: rewriteUrl(n.url, doc.shared) }];
     case "paragraph":
       // a paragraph may contain JSX that yields blocks (Update, callouts): split it
-      return toBlocks(children(n, doc));
+      return toBlocks(withHoistedAnchors({ type: "paragraph" }, children(n, doc)).flatMap((x) => (x.type === "paragraph" ? x.children : [x])));
     default:
       if (Array.isArray(n.children)) {
         const kids = children(n, doc);
-        return [{ ...n, children: FLOW_PARENTS.has(n.type) ? toBlocks(kids) : kids }];
+        if (FLOW_PARENTS.has(n.type)) return [{ ...n, children: toBlocks(kids) }];
+        return withHoistedAnchors(n, n.type === "heading" ? trimEnd(kids) : kids);
       }
       return [n];
   }
@@ -185,7 +228,16 @@ function transformJsx(el: N, doc: Doc): N[] {
   }
   if (name === "Update") {
     const label = attr(el, "label") ?? "";
-    return [{ type: "heading", depth: 2, children: [{ type: "text", value: label }] }, ...toBlocks(kids())];
+    const update: UpdateMeta = { label, tags: [] };
+    const tags = jsxExpr(el, "tags");
+    if (Array.isArray(tags)) update.tags = tags.filter((t): t is string => typeof t === "string");
+    const rss = jsxExpr(el, "rss");
+    if (rss && typeof rss === "object" && !Array.isArray(rss)) {
+      const r = rss as Record<string, unknown>;
+      if (typeof r.title === "string") update.rssTitle = r.title;
+      if (typeof r.description === "string") update.rssDescription = r.description;
+    }
+    return [{ type: "heading", depth: 2, children: [{ type: "text", value: label }], data: { update } }, ...toBlocks(kids())];
   }
   if (name && TITLED.has(name)) {
     const key = TITLE_ATTRS.find((k) => attr(el, k));

@@ -35,3 +35,11 @@ export interface CleanResult {
   snippetDeps: string[];
   problems: string[];
 }
+
+/** Stored on the H2 mdast node generated from `<Update>` as `data.update`. */
+export interface UpdateMeta {
+  label: string;
+  tags: string[];
+  rssTitle?: string;
+  rssDescription?: string;
+}
