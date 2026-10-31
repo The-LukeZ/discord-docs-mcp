@@ -418,3 +418,71 @@ export async function getSectionSummaries(db: D1Database, snapshotId: number, id
   }
   return out;
 }
+
+/** Every object with this name (case-insensitive), in page order. */
+export async function findObjects(db: D1Database, snapshotId: number, name: string, limit = 10): Promise<ObjectRow[]> {
+  const res = await db
+    .prepare("SELECT name, section_id, fields FROM objects WHERE snapshot_id = ?1 AND lower(name) = lower(?2) ORDER BY rowid LIMIT ?3")
+    .bind(snapshotId, name, limit)
+    .all<Row>();
+  return res.results.map((r) => ({ name: r.name, sectionId: r.section_id, fields: json<ParsedField[]>(r.fields) }));
+}
+
+/** Name and section id of every object, in page order (for fuzzy name matching). */
+export async function listObjectNames(db: D1Database, snapshotId: number): Promise<Array<{ name: string; sectionId: string }>> {
+  const res = await db.prepare("SELECT name, section_id FROM objects WHERE snapshot_id = ?1 ORDER BY rowid").bind(snapshotId).all<Row>();
+  return res.results.map((r) => ({ name: r.name, sectionId: r.section_id }));
+}
+
+/** Name and section id of every enum table, in page order (for fuzzy name matching). */
+export async function listEnumNames(db: D1Database, snapshotId: number): Promise<Array<{ name: string; sectionId: string }>> {
+  const res = await db.prepare("SELECT name, section_id FROM enums WHERE snapshot_id = ?1 ORDER BY rowid").bind(snapshotId).all<Row>();
+  return res.results.map((r) => ({ name: r.name, sectionId: r.section_id }));
+}
+
+/** Enums owned by the object `objectName` or whose name starts with it ("Channel Flags" for "Channel"), page order. */
+export async function findRelatedEnums(db: D1Database, snapshotId: number, objectName: string, limit = 30): Promise<EnumRow[]> {
+  const res = await db
+    .prepare(
+      `SELECT name, section_id, owner_object, columns, rows FROM enums
+       WHERE snapshot_id = ?1 AND (lower(owner_object) = lower(?2) OR substr(lower(name), 1, length(?2) + 1) = lower(?2) || ' ')
+       ORDER BY rowid LIMIT ?3`,
+    )
+    .bind(snapshotId, objectName, limit)
+    .all<Row>();
+  return res.results.map((r) => ({
+    name: r.name,
+    sectionId: r.section_id,
+    ownerObject: r.owner_object,
+    columns: json<string[]>(r.columns),
+    rows: json<string[][]>(r.rows),
+  }));
+}
+
+/** Endpoints whose owning section has one of these base ids (part suffixes of the stored id are ignored). */
+export async function getEndpointsBySectionIds(db: D1Database, snapshotId: number, baseIds: string[]): Promise<EndpointRow[]> {
+  const out: EndpointRow[] = [];
+  const unique = [...new Set(baseIds)];
+  for (let i = 0; i < unique.length; i += 50) {
+    const part = unique.slice(i, i + 50);
+    const marks = part.map((_, k) => `?${k + 2}`).join(", ");
+    const res = await db
+      .prepare(
+        `SELECT name, method, path_template, normalized_path, section_id, params FROM endpoints
+         WHERE snapshot_id = ?1 AND (CASE WHEN instr(section_id, '~') > 0 THEN substr(section_id, 1, instr(section_id, '~') - 1) ELSE section_id END) IN (${marks})
+         ORDER BY rowid`,
+      )
+      .bind(snapshotId, ...part)
+      .all<Row>();
+    for (const r of res.results)
+      out.push({
+        name: r.name,
+        method: r.method,
+        pathTemplate: r.path_template,
+        normalizedPath: r.normalized_path,
+        sectionId: r.section_id,
+        params: json<ParamTable[]>(r.params),
+      });
+  }
+  return out;
+}
