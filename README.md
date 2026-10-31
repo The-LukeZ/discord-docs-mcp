@@ -4,6 +4,8 @@ Public, authless remote MCP server on Cloudflare Workers serving Discord's devel
 
 Content: Discord Developer Documentation, CC-BY-SA 4.0. Not affiliated with Discord.
 
+> **Notice:** Discord hosts an official, authless MCP server for its docs at <https://docs.discord.com/mcp>. It offers a generic documentation search and a read-only virtual filesystem over the pages. This project is an independent alternative, not a replacement. It adds structured lookups for endpoints, objects and enums, identifier-aware search, stable section ids, change tracking between refreshes, and answers pinned to a docs commit. If you only need general docs search, use the official server.
+
 ## Setup
 
 ```bash
