@@ -38,7 +38,7 @@ describe("splitSections", () => {
   });
   it("collects sub anchors: manual and slug", async () => {
     const s = await splitSections(tree('## A\n\n<ManualAnchor id="m1" />\n\n#### Sub One\n\nx\n\n<ManualAnchor id="stray" />\n\ntext'), page, opts);
-    expect(s[1].subAnchors).toEqual(["m1", "stray"]);
+    expect(s[1].subAnchors).toEqual(["m1", "sub-one", "stray"]);
   });
   it("<a id> alias adds an anchor without replacing the heading slug", async () => {
     const s = await splitSections(tree('x\n\n<a id="old-name"/>\n## New Name\n\ny'), page, opts);
@@ -50,6 +50,32 @@ describe("splitSections", () => {
     const s = await splitSections(tree("## Dup\n\n#### Dup\n\n## Dup"), page, opts);
     expect(s.map((x) => x.anchor)).toEqual(["", "dup", "dup-2"]);
     expect(s[1].subAnchors).toEqual(["dup-1"]);
+  });
+  it("keeps both the manual id and the slug for headings preceded by a ManualAnchor", async () => {
+    const s = await splitSections(tree('<ManualAnchor id="m-h2" />\n## Two\n\n<ManualAnchor id="m-h4" />\n#### Four\n\nx'), page, opts);
+    expect(s[1].anchor).toBe("m-h2");
+    expect(s[1].subAnchors).toEqual(["two", "m-h4", "four"]);
+  });
+  it("re-fences a long code block split across parts", async () => {
+    const code = "```json\n" + Array.from({ length: 10 }, (_, i) => `{"k${i}": "${"x".repeat(900)}"}`).join("\n\n") + "\n```";
+    const s = (await splitSections(tree(`## Big\n\n${code}`), page, { splitChars: 3000 })).filter((x) => x.baseId === "p#big");
+    expect(s.length).toBeGreaterThan(2);
+    for (const x of s) {
+      expect(x.markdown.split("\n").filter((l) => l.startsWith("```")).length % 2).toBe(0);
+      expect(x.markdown.startsWith("## Big")).toBe(true);
+    }
+    for (const x of s.slice(1)) expect(x.markdown.split("\n")[2]).toBe("```json");
+  });
+  it("splits a long block without blank lines", async () => {
+    const lines = Array.from({ length: 200 }, (_, i) => `line ${i} ${"y".repeat(40)}`).join("\n");
+    const s = await splitSections(tree(`## Big\n\n${lines}`), page, { splitChars: 1000 });
+    const big = s.filter((x) => x.baseId === "p#big");
+    expect(big.length).toBeGreaterThan(1);
+    for (const x of big) expect(x.markdown.length).toBeLessThanOrEqual(1000 + 40);
+  });
+  it("hard-cuts a single huge line", async () => {
+    const s = await splitSections(tree(`## Big\n\n${"z".repeat(5000)}`), page, { splitChars: 1000 });
+    for (const x of s.filter((y) => y.baseId === "p#big")) expect(x.markdown.length).toBeLessThanOrEqual(1040);
   });
   it("slugify", () => {
     expect(slugify("Create Guild Sound!")).toBe("create-guild-sound");

@@ -24,8 +24,6 @@ const BROKEN_UPSTREAM = new Set([
   "topics/oauth2#twofactor-authentication-requirement",
   // no such anchor in change-log.mdx (the link text refers to "user-installed apps"; no heading/manual anchor matches)
   "change-log#userinstallable-apps-preview",
-  // ManualAnchor on that table is audit-log-entry-object-audit-log-events
-  "resources/audit-log#audit-log-events",
   // ###### Application Command Permissions Constants has no ManualAnchor: real anchor is application-command-permissions-constants
   "interactions/application-commands#application-command-permissions-object-application-command-permissions-constants",
   // ###### Rate Limit Metadata for Opcode Structure / Request Guild Member Rate Limit Metadata Structure have no "rate-limited-" prefixed ManualAnchor

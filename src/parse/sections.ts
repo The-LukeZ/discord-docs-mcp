@@ -67,17 +67,68 @@ async function sha256Hex(s: string): Promise<string> {
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** Split an oversized block's markdown at blank lines (last resort). */
-function splitText(text: string, max: number): string[] {
-  const out: string[] = [];
-  let cur = "";
-  for (const piece of text.split("\n\n")) {
-    if (cur && cur.length + piece.length + 2 > max) {
-      out.push(cur);
-      cur = piece;
-    } else cur = cur ? `${cur}\n\n${piece}` : piece;
+interface Fence {
+  marker: string;
+  info: string;
+}
+
+/** Fence state after reading `lines`, starting from `state`. */
+function fenceAfter(state: Fence | null, lines: string[]): Fence | null {
+  for (const l of lines) {
+    const m = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(l);
+    if (!m) continue;
+    if (!state) state = { marker: m[1], info: m[2] };
+    else if (m[1][0] === state.marker[0] && m[1].length >= state.marker.length && m[2].trim() === "") state = null;
   }
-  if (cur) out.push(cur);
+  return state;
+}
+
+/**
+ * Split an oversized block's markdown into pieces of at most ~max chars (plus a small fence allowance).
+ * Prefers blank lines, then single newlines, then a hard cut inside a line. A piece that ends inside a
+ * code fence is closed with the same marker and the next piece reopens it with the same info string.
+ */
+function splitText(text: string, max: number): string[] {
+  const reserve = 16; // room for a closing fence line
+  const budget = Math.max(max - reserve, 1);
+  const lines = text.split("\n").flatMap((l) => {
+    if (l.length <= budget) return [l];
+    const cuts: string[] = [];
+    for (let i = 0; i < l.length; i += budget) cuts.push(l.slice(i, i + budget));
+    return cuts;
+  });
+  const out: string[] = [];
+  let state: Fence | null = null; // fence open at the start of the current piece
+  let cur: string[] = [];
+  let len = 0;
+  const open = (): string[] => (state ? [state.marker + state.info] : []);
+  const emit = (piece: string[]): void => {
+    const end = fenceAfter(state, piece);
+    out.push([...piece, ...(end ? [end.marker] : [])].join("\n"));
+    state = end;
+  };
+  cur = open();
+  len = cur.join("\n").length;
+  const startLen = cur.length;
+  for (const l of lines) {
+    if (cur.length > startLen && len + l.length + 1 > budget) {
+      // prefer the last blank line as the break point
+      let cut = -1;
+      for (let i = cur.length - 1; i > startLen; i--) if (cur[i] === "") { cut = i; break; }
+      if (cut > 0) {
+        const rest = cur.slice(cut + 1);
+        emit(cur.slice(0, cut));
+        cur = [...open(), ...rest];
+      } else {
+        emit(cur);
+        cur = open();
+      }
+      len = cur.join("\n").length;
+    }
+    cur.push(l);
+    len += l.length + 1;
+  }
+  if (cur.length > open().length) emit(cur);
   return out;
 }
 
@@ -119,9 +170,10 @@ function atomize(body: N[], max: number): Atom[] {
 
 function collectSubAnchors(nodes: N[], slugOf: (n: N) => string): string[] {
   const out: string[] = [];
-  nodes.forEach((n, i) => {
+  nodes.forEach((n) => {
     if (n.type === "manualAnchor") out.push(n.id);
-    else if (isHeading(n, 4, 5, 6) && (nodes[i - 1]?.type !== "manualAnchor" || nodes[i - 1].alias)) out.push(slugOf(n));
+    // A preceding manual anchor does not hide the heading's own slug: both ids exist on the site.
+    else if (isHeading(n, 4, 5, 6)) out.push(slugOf(n));
   });
   return out;
 }
@@ -187,6 +239,7 @@ export async function splitSections(
       const part = i + 1;
       const markdown = [headingLine, ...parts[i].map((a) => a.text).filter((t) => t !== "")].join("\n\n");
       const subAnchors = collectSubAnchors(parts[i].flatMap((a) => a.nodes), slugOf);
+      if (!intro && part === 1 && u.manualAnchor && slugOf(u.heading!) !== anchor) subAnchors.unshift(slugOf(u.heading!));
       // Links to the page title (`#rate-limits` on "Rate Limits") land on the intro.
       if (intro && part === 1) subAnchors.unshift(...new Set([slugify(page.title), ...h1Slugs].filter((a) => a !== "")));
       out.push({
