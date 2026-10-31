@@ -1,0 +1,12 @@
+{
+  "name": "discord-docs-marketplace",
+  "owner": { "name": "The-LukeZ" },
+  "metadata": { "description": "Discord developer docs MCP plugin" },
+  "plugins": [
+    {
+      "name": "discord-docs",
+      "source": "./plugin",
+      "description": "Search and read Discord's developer docs via MCP"
+    }
+  ]
+}

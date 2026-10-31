@@ -11,7 +11,13 @@ Content: Discord Developer Documentation, CC-BY-SA 4.0. Not affiliated with Disc
 
 ## Connect
 
-Claude Code:
+Claude Code, as a plugin:
+
+```
+/plugin install discord-docs --marketplace The-LukeZ/discord-docs-mcp
+```
+
+Claude Code, as a plain MCP server:
 
 ```bash
 claude mcp add --transport http discord-docs https://bugcord-mcp.dev/mcp
@@ -33,14 +39,14 @@ Clients configured through JSON (the exact key names differ per client):
 
 All tools are read-only. Every result that contains documentation includes its `docs.discord.com` URL, and every response states the docs commit it was built from (`indexed_commit`, `indexed_at`).
 
-| Tool | Use it for |
-| --- | --- |
-| `search_docs` | Open questions and keyword search. Ranks exact identifiers (`GUILD_MEMBERS`, `rate_limit_per_user`) highly. |
-| `get_section` | The full text of one section, by section id or `docs.discord.com` URL (including legacy `discord.com/developers/docs` links). Long sections page with a cursor. |
-| `lookup_endpoint` | A REST endpoint by name (`Get Channel`), path, or `METHOD path`. Path parameters can be written in any form (`{channel.id}`, `123`). |
-| `lookup_object` | An object's parsed field list and its related enums and flags. |
-| `lookup_enum` | An enum or flag table with its original columns, for example `Channel Types` or `Permission Flags`. |
-| `recent_changes` | Changelog entries and detected documentation changes since a date. |
+| Tool              | Use it for                                                                                                                                                      |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `search_docs`     | Open questions and keyword search. Ranks exact identifiers (`GUILD_MEMBERS`, `rate_limit_per_user`) highly.                                                     |
+| `get_section`     | The full text of one section, by section id or `docs.discord.com` URL (including legacy `discord.com/developers/docs` links). Long sections page with a cursor. |
+| `lookup_endpoint` | A REST endpoint by name (`Get Channel`), path, or `METHOD path`. Path parameters can be written in any form (`{channel.id}`, `123`).                            |
+| `lookup_object`   | An object's parsed field list and its related enums and flags.                                                                                                  |
+| `lookup_enum`     | An enum or flag table with its original columns, for example `Channel Types` or `Permission Flags`.                                                             |
+| `recent_changes`  | Changelog entries and detected documentation changes since a date.                                                                                              |
 
 Unknown ids and unmatched names return a "Not found" message with up to five suggestions, never an empty success.
 
@@ -61,12 +67,12 @@ No accounts and no stored personal data. Logs contain tool names and query text,
 
 ## Routes
 
-| Route | Purpose |
-| --- | --- |
-| `/` | Redirects to this repository |
-| `/mcp` | The MCP endpoint |
-| `/health` | Index status as JSON |
-| `/privacy` | Privacy page |
+| Route                 | Purpose                                               |
+| --------------------- | ----------------------------------------------------- |
+| `/`                   | Redirects to this repository                          |
+| `/mcp`                | The MCP endpoint                                      |
+| `/health`             | Index status as JSON                                  |
+| `/privacy`            | Privacy page                                          |
 | `POST /admin/refresh` | Start a refresh (operator only, bearer `ADMIN_TOKEN`) |
 
 ## Run your own

@@ -1,0 +1,5 @@
+{
+  "mcpServers": {
+    "discord-docs": { "type": "http", "url": "https://bugcord-mcp.dev/mcp" }
+  }
+}
