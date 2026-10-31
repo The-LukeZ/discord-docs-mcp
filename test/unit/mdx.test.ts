@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanMdx, toMarkdown } from "../../src/parse/mdx";
+import { cleanMdx, parseImports, toMarkdown } from "../../src/parse/mdx";
 import { loadCorpus } from "./corpus";
 
 const ctx = { pagePath: "p", snippets: new Map<string, string>() };
@@ -105,4 +105,27 @@ describe("corpus smoke", () => {
     expect(firstUpdate.tags.length).toBeGreaterThan(0);
     expect(firstUpdate.rssTitle).toBeTruthy();
   }, 30_000);
+});
+
+describe("parseImports", () => {
+  const parse = (esm: string) => {
+    const m = new Map<string, string>();
+    parseImports(esm, m);
+    return Object.fromEntries(m);
+  };
+  it("parses default, named, aliased, mixed and multiline; ignores namespace imports", () => {
+    expect(parse('import A from "/a.mdx";')).toEqual({ A: "/a.mdx" });
+    expect(parse("import { B, C as D } from '/b.mdx'")).toEqual({ B: "/b.mdx", D: "/b.mdx" });
+    // Namespace imports were never recorded (only default and named bindings are); behavior kept.
+    expect(parse('import * as NS from "/ns.mdx"')).toEqual({});
+    expect(parse('import E, { F } from "/e.mdx"')).toEqual({ E: "/e.mdx", F: "/e.mdx" });
+    expect(parse('import {\n  G,\n  H,\n} from "/g.mdx";\nimport I from "/i.mdx";')).toEqual({ G: "/g.mdx", H: "/g.mdx", I: "/i.mdx" });
+  });
+  it("handles pathological whitespace in linear time", () => {
+    const start = performance.now();
+    parseImports("import" + " ".repeat(20000) + '"x"', new Map());
+    parseImports("import a" + " ".repeat(20000) + "b", new Map());
+    parseImports("import a ".repeat(5000), new Map());
+    expect(performance.now() - start).toBeLessThan(100);
+  });
 });

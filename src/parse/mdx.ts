@@ -87,8 +87,21 @@ function textOf(n: N): string {
   return Array.isArray(n.children) ? n.children.map(textOf).join("") : "";
 }
 
-function parseImports(esm: string, into: Map<string, string>): void {
-  for (const m of esm.matchAll(/import\s+([^'"]+?)\s+from\s+['"]([^'"]+)['"]/g)) {
+/** Longest ESM block inspected. Real import blocks are a few hundred characters; the cap bounds worst-case work. */
+const MAX_ESM_CHARS = 20_000;
+
+/**
+ * Record `local name -> module specifier` for each static import in an MDX ESM block.
+ * Linear time: whitespace runs are collapsed first, then the text is split at each `import` keyword and every
+ * piece is matched with an anchored pattern, so no start position rescans the rest of the input.
+ * Input beyond MAX_ESM_CHARS is ignored.
+ */
+export function parseImports(esm: string, into: Map<string, string>): void {
+  const text = esm.slice(0, MAX_ESM_CHARS).replace(/\s+/g, " ");
+  const pieces = text.split(/(?<![\w$])import(?![\w$])/).slice(1);
+  for (const piece of pieces) {
+    const m = piece.match(/^\s+([^'"]+?)\s+from\s+['"]([^'"]+)['"]/);
+    if (!m) continue;
     const clause = m[1]!.trim();
     const spec = m[2]!;
     const def = clause.match(/^([A-Za-z_$][\w$]*)/);
