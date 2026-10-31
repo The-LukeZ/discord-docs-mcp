@@ -34,7 +34,10 @@
     "RESPONSE_CHAR_CAP": "32000",
     "STALE_AFTER_HOURS": "72",
   },
-  "observability": { "enabled": true },
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "invocation_logs": false },
+  },
   "workers_dev": false,
   "preview_urls": true,
   "routes": [
