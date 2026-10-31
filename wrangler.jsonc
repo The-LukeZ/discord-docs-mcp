@@ -2,19 +2,19 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "discord-docs-mcp",
   "main": "src/index.ts",
+  "account_id": "92d72ac72fb811275ce6e8d5263a9816",
   "compatibility_date": "2026-10-30",
   "compatibility_flags": ["nodejs_compat"],
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "discord-docs",
-      // Placeholder. Replace with the id from `wrangler d1 create discord-docs --jurisdiction=eu`.
-      "database_id": "00000000-0000-0000-0000-000000000000",
-      "migrations_dir": "migrations"
-    }
+      "database_id": "e7073ce2-812f-4d8f-b4c5-c7cc2254c25d",
+      "migrations_dir": "migrations",
+    },
   ],
   "durable_objects": {
-    "bindings": [{ "name": "LIMITER", "class_name": "GlobalLimiter" }]
+    "bindings": [{ "name": "LIMITER", "class_name": "GlobalLimiter" }],
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GlobalLimiter"] }],
   "workflows": [
@@ -22,8 +22,8 @@
       "name": "discord-docs-refresh",
       "binding": "REFRESH_WORKFLOW",
       "class_name": "RefreshWorkflow",
-      "jurisdiction": "eu"
-    }
+      "jurisdiction": "eu",
+    },
   ],
   "triggers": { "crons": ["17 4 * * *"] },
   "vars": {
@@ -32,7 +32,7 @@
     "CAP_PER_DAY": "30000",
     "SECTION_SPLIT_CHARS": "6000",
     "RESPONSE_CHAR_CAP": "32000",
-    "STALE_AFTER_HOURS": "72"
+    "STALE_AFTER_HOURS": "72",
   },
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
 }
