@@ -72,11 +72,14 @@ async function deletePages(db: D1Database, snapshotId: number, paths: string[]):
   for (const chunk of chunks(paths, PATH_CHUNK)) await db.batch(deletePageStatements(db, snapshotId, chunk));
 }
 
-/** Enum lookup key per row: the "name"-like column when there is one, else the first column. */
+/** Trailing footnote marker of a docs table cell (`ADMINISTRATOR *`, `FOO†`). */
+const KEY_MARKER = /[\s*†‡§]+$/u;
+
+/** Enum lookup key per row: the "name"-like column when there is one, else the first column, without footnote markers. */
 function enumKeys(e: ParsedEnum): string[] {
   const lower = e.columns.map((c) => c.toLowerCase());
   const idx = Math.max(0, lower.findIndex((c) => ["name", "key", "flag", "permission"].includes(c)));
-  return e.rows.map((r) => r[idx] ?? "").filter((k) => k !== "");
+  return e.rows.map((r) => (r[idx] ?? "").replace(KEY_MARKER, "")).filter((k) => k !== "");
 }
 
 /**

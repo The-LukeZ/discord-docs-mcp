@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
 import { searchDocs } from "../../src/search/search";
+import { findEnums } from "../../src/store/read";
 import { indexCorpus } from "./corpus-index";
 
 let sid = 0;
@@ -14,6 +15,9 @@ const top3 = async (q: string) => (await search(q)).slice(0, 3);
 describe("golden queries", () => {
   it("GUILD_MEMBERS -> Gateway Intents", async () =>
     expect((await top3("GUILD_MEMBERS")).some((h) => h.headingPath.join(" ").includes("Gateway Intents"))).toBe(true));
+
+  it("GUILD_MEMBERS finds the intents list in the top 8", async () =>
+    expect((await search("GUILD_MEMBERS", 8)).some((h) => h.sectionId === "events/gateway#list-of-intents")).toBe(true));
 
   it("rate_limit_per_user -> Channel Object", async () =>
     expect((await top3("rate_limit_per_user")).some((h) => h.sectionId.startsWith("resources/channel#channel-object"))).toBe(true));
@@ -42,8 +46,9 @@ describe("golden queries", () => {
   });
 
   it("an object name ranks the object section first", async () => {
-    const [first] = await search("Channel Object");
-    expect(first).toBeDefined();
+    const [first] = await search("Channel");
+    expect(first.matchedOn).toBe("object");
+    expect(first.sectionId).toBe("resources/channel#channel-object");
     const byName = await search("Message");
     expect(byName.some((h) => h.matchedOn === "object")).toBe(true);
   });
@@ -112,15 +117,39 @@ describe("shape", () => {
   it("area filter applies to every tier", async () => {
     for (const q of ["channel", "Get Channel", "rate_limit_per_user", "GUILD_MEMBERS"]) {
       const hits = await search(q, 8, "resources");
+      expect(hits.length, q).toBeGreaterThan(0);
       expect(hits.every((h) => h.sectionId.startsWith("resources/")), q).toBe(true);
     }
     const events = await search("GUILD_MEMBERS", 8, "events");
+    expect(events.length).toBeGreaterThan(0);
     expect(events.every((h) => h.sectionId.startsWith("events/"))).toBe(true);
     expect(await search("channel", 8, "no-such-area")).toEqual([]);
   });
 
+  it("area filter is applied in SQL before the per-tier limit (field and enum-key tiers)", async () => {
+    // `id` is a field of 44 objects under resources/ but components/ rows come first in page order
+    const fields = await search("id", 8, "resources");
+    expect(fields.some((h) => h.matchedOn === "field")).toBe(true);
+    expect(fields.every((h) => h.sectionId.startsWith("resources/"))).toBe(true);
+    // ANNOUNCEMENT_THREAD is an enum key in developer-tools/ and resources/
+    const keys = await search("ANNOUNCEMENT_THREAD", 8, "resources");
+    expect(keys[0]).toMatchObject({ matchedOn: "enum", sectionId: "resources/channel#channel-object" });
+    // the object "Message" exists in developer-tools/ (first in page order) and resources/
+    const obj = await search("Message", 8, "resources");
+    expect(obj[0]).toMatchObject({ matchedOn: "object", sectionId: "resources/message#message-object" });
+  });
+
   it("is scoped to the snapshot id", async () => {
     expect(await searchDocs(env.DB, sid + 1000, { query: "channel", limit: 8 })).toEqual([]);
+  });
+});
+
+describe("enum keys", () => {
+  it("are stored without footnote markers", async () => {
+    const bad = (await env.DB.prepare("SELECT count(*) c FROM enum_keys WHERE snapshot_id = ?1 AND (key GLOB '*[*†‡§ ]')").bind(sid).first()) as { c: number };
+    expect(bad.c).toBe(0);
+    const rows = await findEnums(env.DB, sid, { key: "ADMINISTRATOR" });
+    expect(rows.map((r) => r.name)).toContain("Bitwise Permission Flags");
   });
 });
 

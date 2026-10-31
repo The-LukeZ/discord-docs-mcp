@@ -75,18 +75,18 @@ export async function searchDocs(db: D1Database, snapshotId: number, input: Sear
   const ep = parseEndpointQuery(query);
   if (ep.name === undefined || ep.name.length <= MAX_NAME_CHARS) {
     if (ep.path !== undefined || ep.name !== undefined) {
-      const rows = await findEndpoints(db, snapshotId, { name: ep.name, method: ep.method, normalizedPath: ep.path, limit: MAX_LIMIT });
+      const rows = await findEndpoints(db, snapshotId, { name: ep.name, method: ep.method, normalizedPath: ep.path, area, limit: MAX_LIMIT });
       await addIds(rows.map((r) => r.sectionId), "endpoint");
     }
     if (ep.name !== undefined) {
-      const obj = await findObject(db, snapshotId, ep.name);
+      const obj = await findObject(db, snapshotId, ep.name, area);
       if (obj) await addIds([obj.sectionId], "object");
-      const enums = await findEnums(db, snapshotId, { name: ep.name, limit: MAX_LIMIT });
+      const enums = await findEnums(db, snapshotId, { name: ep.name, area, limit: MAX_LIMIT });
       await addIds(enums.map((e) => e.sectionId), "enum");
 
       // Tier 1: field names and enum keys.
-      await addIds(await findFieldSectionIds(db, snapshotId, ep.name, MAX_LIMIT), "field");
-      await addIds(await findEnumKeySectionIds(db, snapshotId, ep.name, MAX_LIMIT), "enum");
+      await addIds(await findFieldSectionIds(db, snapshotId, ep.name, MAX_LIMIT, area), "field");
+      await addIds(await findEnumKeySectionIds(db, snapshotId, ep.name, MAX_LIMIT, area), "enum");
     }
   }
 

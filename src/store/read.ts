@@ -108,6 +108,10 @@ export async function getSnapshotInfo(db: D1Database, now: Date, staleAfterHours
   };
 }
 
+/** SQL condition: `col` is the id of a section of this snapshot in `area` (`areaParam` is the bound area, e.g. `?3`). */
+const inArea = (col: string, areaParam: string): string =>
+  `${col} IN (SELECT id FROM sections WHERE snapshot_id = ?1 AND area = ${areaParam})`;
+
 const SECTION_COLS = "id, base_id, page_path, area, anchor, heading, heading_path, level, part, ord, markdown, content_hash";
 const toSection = (r: Row): SectionRow => ({
   id: r.id,
@@ -194,7 +198,7 @@ export async function resolveAnchor(db: D1Database, snapshotId: number, pagePath
 export async function findEndpoints(
   db: D1Database,
   snapshotId: number,
-  q: { name?: string; method?: string; normalizedPath?: string; limit?: number },
+  q: { name?: string; method?: string; normalizedPath?: string; area?: string; limit?: number },
 ): Promise<EndpointRow[]> {
   const where = ["snapshot_id = ?1"];
   const bind: unknown[] = [snapshotId];
@@ -205,6 +209,10 @@ export async function findEndpoints(
   if (q.name !== undefined) add("lower(name) = lower(?)", q.name);
   if (q.method !== undefined) add("upper(method) = upper(?)", q.method);
   if (q.normalizedPath !== undefined) add("normalized_path = ?", q.normalizedPath);
+  if (q.area !== undefined) {
+    bind.push(q.area);
+    where.push(inArea("section_id", `?${bind.length}`));
+  }
   bind.push(q.limit ?? 50);
   const res = await db
     .prepare(
@@ -224,16 +232,20 @@ export async function findEndpoints(
 }
 
 /** Case-insensitive object lookup; first match in page order. */
-export async function findObject(db: D1Database, snapshotId: number, name: string): Promise<ObjectRow | null> {
+export async function findObject(db: D1Database, snapshotId: number, name: string, area?: string): Promise<ObjectRow | null> {
   const r = await db
-    .prepare("SELECT name, section_id, fields FROM objects WHERE snapshot_id = ?1 AND lower(name) = lower(?2) ORDER BY rowid LIMIT 1")
-    .bind(snapshotId, name)
+    .prepare(
+      `SELECT name, section_id, fields FROM objects
+       WHERE snapshot_id = ?1 AND lower(name) = lower(?2)${area !== undefined ? ` AND ${inArea("section_id", "?3")}` : ""}
+       ORDER BY rowid LIMIT 1`,
+    )
+    .bind(...(area !== undefined ? [snapshotId, name, area] : [snapshotId, name]))
     .first<Row>();
   return r ? { name: r.name, sectionId: r.section_id, fields: json<ParsedField[]>(r.fields) } : null;
 }
 
 /** Enums by name and/or by a key (row name) they contain, case-insensitive. No criteria gives no result. */
-export async function findEnums(db: D1Database, snapshotId: number, q: { name?: string; key?: string; limit?: number }): Promise<EnumRow[]> {
+export async function findEnums(db: D1Database, snapshotId: number, q: { name?: string; key?: string; area?: string; limit?: number }): Promise<EnumRow[]> {
   const any: string[] = [];
   const bind: unknown[] = [snapshotId];
   if (q.name !== undefined) {
@@ -247,11 +259,16 @@ export async function findEnums(db: D1Database, snapshotId: number, q: { name?: 
     );
   }
   if (any.length === 0) return [];
+  let areaCond = "";
+  if (q.area !== undefined) {
+    bind.push(q.area);
+    areaCond = ` AND ${inArea("e.section_id", `?${bind.length}`)}`;
+  }
   bind.push(q.limit ?? 50);
   const res = await db
     .prepare(
       `SELECT e.name, e.section_id, e.owner_object, e.columns, e.rows FROM enums e
-       WHERE e.snapshot_id = ?1 AND (${any.join(" OR ")}) ORDER BY e.rowid LIMIT ?${bind.length}`,
+       WHERE e.snapshot_id = ?1 AND (${any.join(" OR ")})${areaCond} ORDER BY e.rowid LIMIT ?${bind.length}`,
     )
     .bind(...bind)
     .all<Row>();
@@ -331,29 +348,30 @@ export async function counts(
   };
 }
 
-/** Section ids of the objects that have a field called `name` (case-insensitive), in page order. */
-export async function findFieldSectionIds(db: D1Database, snapshotId: number, name: string, limit = 20): Promise<string[]> {
+/** Section ids of the objects that have a field called `name` (case-insensitive), in page order; optionally only in `area`. */
+export async function findFieldSectionIds(db: D1Database, snapshotId: number, name: string, limit = 20, area?: string): Promise<string[]> {
   const res = await db
     .prepare(
-      `SELECT section_id FROM fields WHERE snapshot_id = ?1 AND lower(name) = lower(?2) AND section_id IS NOT NULL
+      `SELECT section_id FROM fields WHERE snapshot_id = ?1 AND lower(name) = lower(?2) AND section_id IS NOT NULL${
+        area !== undefined ? ` AND ${inArea("section_id", "?4")}` : ""
+      }
        ORDER BY rowid LIMIT ?3`,
     )
-    .bind(snapshotId, name, limit)
+    .bind(...(area !== undefined ? [snapshotId, name, limit, area] : [snapshotId, name, limit]))
     .all<{ section_id: string }>();
   return res.results.map((r) => r.section_id);
 }
 
-/**
- * Section ids of the enums that have a row key `key` (case-insensitive). Stored keys can still carry the footnote
- * marker of the docs table (`ADMINISTRATOR *`), so trailing spaces, `*`, `†`, `‡` and `§` are ignored.
- */
-export async function findEnumKeySectionIds(db: D1Database, snapshotId: number, key: string, limit = 20): Promise<string[]> {
+/** Section ids of the enums that have a row key `key` (case-insensitive); optionally only in `area`. */
+export async function findEnumKeySectionIds(db: D1Database, snapshotId: number, key: string, limit = 20, area?: string): Promise<string[]> {
   const res = await db
     .prepare(
-      `SELECT section_id FROM enum_keys WHERE snapshot_id = ?1 AND lower(rtrim(key, ' *†‡§')) = lower(?2) AND section_id IS NOT NULL
+      `SELECT section_id FROM enum_keys WHERE snapshot_id = ?1 AND lower(key) = lower(?2) AND section_id IS NOT NULL${
+        area !== undefined ? ` AND ${inArea("section_id", "?4")}` : ""
+      }
        ORDER BY rowid LIMIT ?3`,
     )
-    .bind(snapshotId, key, limit)
+    .bind(...(area !== undefined ? [snapshotId, key, limit, area] : [snapshotId, key, limit]))
     .all<{ section_id: string }>();
   return res.results.map((r) => r.section_id);
 }
