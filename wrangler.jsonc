@@ -27,7 +27,7 @@
   ],
   "triggers": { "crons": ["17 4 * * *"] },
   "vars": {
-    "PUBLIC_ORIGIN": "https://discord-docs-mcp.example.workers.dev",
+    "PUBLIC_ORIGIN": "https://bugcord-mcp.dev",
     "CAP_PER_MINUTE": "300",
     "CAP_PER_DAY": "30000",
     "SECTION_SPLIT_CHARS": "6000",
@@ -35,4 +35,12 @@
     "STALE_AFTER_HOURS": "72",
   },
   "observability": { "enabled": true },
+  "workers_dev": false,
+  "preview_urls": true,
+  "routes": [
+    {
+      "custom_domain": true,
+      "pattern": "bugcord-mcp.dev",
+    },
+  ],
 }

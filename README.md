@@ -10,13 +10,13 @@ Content: Discord Developer Documentation, CC-BY-SA 4.0. Not affiliated with Disc
 npm install
 ```
 
-### Create the EU D1 database (one time, operator)
+### Create the EU D1 database
 
 ```bash
 npx wrangler@latest d1 create discord-docs --jurisdiction=eu
 ```
 
-Paste the returned `database_id` into `wrangler.jsonc` (it currently holds the placeholder `00000000-0000-0000-0000-000000000000`). Confirm in the dashboard that the database shows jurisdiction EU. A database created without `eu` must be deleted and recreated.
+Paste the returned `database_id` into `wrangler.jsonc`. Confirm in the dashboard that the database shows jurisdiction EU. A database created without `eu` must be deleted and recreated.
 
 Then set `PUBLIC_ORIGIN` in `wrangler.jsonc` to the deployed origin, apply migrations with `npx wrangler d1 migrations apply discord-docs --remote`, and set secrets `GITHUB_FETCH_TOKEN` and `ADMIN_TOKEN`.
 
