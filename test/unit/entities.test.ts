@@ -3,9 +3,9 @@ import { cleanMdx } from "../../src/parse/mdx";
 import { extractEntities, normalizePath } from "../../src/parse/entities";
 import { sectionUnits, splitSections } from "../../src/parse/sections";
 
-async function run(md: string) {
+async function run(md: string, splitChars = 6000) {
   const { tree } = cleanMdx(md, { pagePath: "p", snippets: new Map() });
-  const sections = await splitSections(tree, { path: "p", title: "T" }, { splitChars: 6000 });
+  const sections = await splitSections(tree, { path: "p", title: "T" }, { splitChars });
   return extractEntities(sectionUnits(tree), sections);
 }
 
@@ -33,6 +33,33 @@ describe("extractEntities", () => {
     const r = await run("### X Object\n\n###### X Structure\n\n| Foo |\n|-|\n| a |\n\n### Y Object\n\n###### Y Structure\n\n| Field | Type | Description |\n|-|-|-|\n| b | int | d |");
     expect(r.problems.length).toBe(1);
     expect(r.objects.map((o) => o.name)).toEqual(["Y"]);
+  });
+});
+
+describe("sectionId with split sections", () => {
+  it("gives each entity the part that holds its table, even with a shared header row", async () => {
+    const tbl = (k: string) => `| Field | Type | Description |
+|-|-|-|
+| ${k} | int | d |`;
+    const src = `### X Object
+
+###### X Structure
+
+${tbl("a")}
+
+###### First Flags
+
+${tbl("b")}
+
+###### Second Flags
+
+${tbl("c")}`;
+    const r = await run(src, 120);
+    expect(r.objects[0].sectionId).toBe("p#x-object");
+    expect(r.enums.map((e) => [e.name, e.sectionId])).toEqual([
+      ["First Flags", "p#x-object~2"],
+      ["Second Flags", "p#x-object~3"],
+    ]);
   });
 });
 

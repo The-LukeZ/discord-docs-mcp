@@ -97,8 +97,14 @@ export function extractEntities(units: SectionUnit[], sections: ParsedSection[])
   const sectionIdFor = (ord: number, node: MdNode): string => {
     const parts = sections.filter((s) => s.ord === ord);
     if (parts.length === 0) return "";
-    const first = md(node).split("\n")[0];
-    return (parts.find((p) => p.markdown.includes(first)) ?? parts[0]).id;
+    const full = md(node).trimEnd();
+    let hit = parts.find((p) => p.markdown.includes(full));
+    if (!hit) {
+      // table cut across parts: the part holding its header, separator and first data row
+      const head = full.split("\n").slice(0, 3).join("\n");
+      hit = parts.find((p) => p.markdown.includes(head));
+    }
+    return (hit ?? parts[0]).id;
   };
 
   units.forEach((u, ord) => {
