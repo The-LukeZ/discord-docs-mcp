@@ -88,6 +88,7 @@ describe("corpus smoke", () => {
       const r = cleanMdx(src, { pagePath: p.replace(/^developers\//, "").replace(/\.mdx$/, ""), snippets });
       if (r.problems.some((x) => x.startsWith("mdx parse failed"))) fallbacks++;
       for (const m of src.matchAll(/<ManualAnchor\s+id="([^"]*)"/g)) srcAnchors.add(m[1]!);
+      for (const m of src.matchAll(/<a\s+id="([^"]*)"\s*\/>/g)) srcAnchors.add(m[1]!);
       const walk = (n: any) => {
         if (n.type === "manualAnchor") outAnchors.add(n.id);
         if (n.data?.update && p === "developers/change-log.mdx") firstUpdate ??= n.data.update;

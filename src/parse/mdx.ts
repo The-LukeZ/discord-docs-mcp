@@ -211,6 +211,10 @@ function transformJsx(el: N, doc: Doc): N[] {
     const id = attr(el, "id");
     return id ? [{ type: "manualAnchor", id }] : [];
   }
+  // `<a id="x"/>` (no content) is an extra anchor target; it keeps the heading's own slug valid too
+  if (name === "a" && el.children.length === 0 && attr(el, "id")) {
+    return [{ type: "manualAnchor", id: attr(el, "id"), alias: true }];
+  }
   if (name === "Route") {
     const text = textOf(el).replace(/\s+/g, " ").trim();
     const method = attr(el, "method");

@@ -10,6 +10,8 @@ export interface Navigation {
 export interface ManualAnchor {
   type: "manualAnchor";
   id: string;
+  /** from `<a id="x"/>`: an extra anchor target that does not replace the heading slug */
+  alias?: boolean;
 }
 
 declare module "mdast" {
@@ -42,4 +44,29 @@ export interface UpdateMeta {
   tags: string[];
   rssTitle?: string;
   rssDescription?: string;
+}
+
+export interface ParsedSection {
+  /** `baseId` for part 1, `${baseId}~${part}` for later parts */
+  id: string;
+  /** `pagePath#anchor`, or `pagePath` for the intro */
+  baseId: string;
+  pagePath: string;
+  /** first segment of pagePath */
+  area: string;
+  /** "" for the intro */
+  anchor: string;
+  heading: string;
+  /** starts with the page title */
+  headingPath: string[];
+  level: 1 | 2 | 3;
+  /** 1-based part number (long sections are split) */
+  part: number;
+  /** 0-based position of the section within the page; all parts of one section share it */
+  ord: number;
+  markdown: string;
+  /** sha256 hex of `markdown` */
+  contentHash: string;
+  /** anchors of H4-H6 headings and stray manual anchors inside this part */
+  subAnchors: string[];
 }
