@@ -143,4 +143,4 @@ Expected: Gateway Intents is in the top 3 results. Local workerd does not implem
 
 ## License and attribution
 
-Documentation content is Discord's developer documentation, licensed CC-BY-SA 4.0, and this project is not affiliated with Discord.
+The source code of this repository is released under the [MIT License](LICENSE). That license does not cover the documentation content the server serves. That content is Discord's developer documentation, licensed CC-BY-SA 4.0 (this includes the copy in `test/fixtures/corpus.json`), and this project is not affiliated with Discord.
