@@ -7,6 +7,21 @@ Content: Discord Developer Documentation, CC-BY-SA 4.0. Not affiliated with Disc
 > [!TIP]
 > Discord hosts an official MCP server for its docs at <https://docs.discord.com/mcp>. It offers a generic documentation search and a read-only virtual filesystem over the pages. This project is an independent alternative, not a replacement. It adds structured lookups for endpoints, objects and enums, identifier-aware search, stable section ids, change tracking between refreshes, and answers pinned to a docs commit. If you only need general docs search, use the official server. This one is just more powerful.
 
+## Requirements
+
+- A Cloudflare account on the **Workers Paid** plan. The refresh runs as a Workflow, and the Free plan allows only 10 ms of CPU and 50 external subrequests per invocation, so the refresh cannot run there.
+- Node.js and npm.
+
+## Routes
+
+| Route | Purpose |
+| --- | --- |
+| `/` | 302 redirect to this repository |
+| `/mcp` | The MCP endpoint (Streamable HTTP, no authentication) |
+| `/health` | Index status as JSON, see [Checking health](#checking-health) |
+| `/privacy` | Privacy page |
+| `POST /admin/refresh` | Start a refresh (bearer `ADMIN_TOKEN`) |
+
 ## Setup
 
 ```bash
@@ -21,7 +36,7 @@ npx wrangler@latest d1 create discord-docs --jurisdiction=eu
 
 Paste the returned `database_id` into `wrangler.jsonc`. Confirm in the dashboard that the database shows jurisdiction EU. A database created without `eu` must be deleted and recreated.
 
-Then set `PUBLIC_ORIGIN` in `wrangler.jsonc` to the deployed origin, apply migrations with `npx wrangler d1 migrations apply discord-docs --remote`, and set secrets `GITHUB_FETCH_TOKEN` and `ADMIN_TOKEN`.
+`PUBLIC_ORIGIN` in `wrangler.jsonc` already holds the production origin `https://bugcord-mcp.dev` and is currently informational only; change it only if you deploy under another origin. Apply migrations with `npx wrangler d1 migrations apply discord-docs --remote`, and set secrets `GITHUB_FETCH_TOKEN` and `ADMIN_TOKEN`.
 
 ## Scripts
 
@@ -59,7 +74,7 @@ Enable a Cloudflare notification for Workflow failures (dashboard: Notifications
 
 ### Checking health
 
-`GET /health` always returns HTTP 200 with JSON:
+`GET /health` returns HTTP 200 whenever D1 is reachable, with JSON:
 
 ```json
 {
