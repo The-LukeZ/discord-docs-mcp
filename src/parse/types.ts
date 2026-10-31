@@ -70,3 +70,58 @@ export interface ParsedSection {
   /** anchors of H4-H6 headings and stray manual anchors inside this part */
   subAnchors: string[];
 }
+
+/** Loose mdast node used by the section/entity code. */
+export interface MdNode {
+  type: string;
+  [k: string]: any;
+}
+
+/** One H2/H3 (or the intro): its heading plus every block up to the next H2/H3. Unit i has `ord` i. */
+export interface SectionUnit {
+  level: 1 | 2 | 3;
+  /** explicit `<ManualAnchor>` placed right before the heading, if any */
+  manualAnchor?: string;
+  /** heading node; null for the intro (the page title is used) */
+  heading: MdNode | null;
+  /** blocks after the heading; may contain H4-H6 headings and manualAnchor markers */
+  body: MdNode[];
+}
+
+export interface ParamTable {
+  name: string;
+  columns: string[];
+  rows: string[][];
+}
+
+export interface ParsedEndpoint {
+  name: string;
+  method: string;
+  pathTemplate: string;
+  normalizedPath: string;
+  sectionId: string;
+  params: ParamTable[];
+}
+
+export interface ParsedField {
+  name: string;
+  optional: boolean;
+  type: string;
+  nullable: boolean;
+  description: string;
+  footnotes: string[];
+}
+
+export interface ParsedObject {
+  name: string;
+  sectionId: string;
+  fields: ParsedField[];
+}
+
+export interface ParsedEnum {
+  name: string;
+  sectionId: string;
+  ownerObject: string | null;
+  columns: string[];
+  rows: string[][];
+}

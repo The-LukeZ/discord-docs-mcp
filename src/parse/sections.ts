@@ -2,7 +2,9 @@ import type { Root } from "mdast";
 import { toString } from "mdast-util-to-string";
 import { createSlugger, slugify } from "./anchors";
 import { toMarkdown } from "./mdx";
-import type { ParsedSection } from "./types";
+import type { ParsedSection, SectionUnit } from "./types";
+
+export type { SectionUnit };
 
 // Loose node type, as in mdx.ts.
 interface N {
@@ -11,17 +13,6 @@ interface N {
 }
 
 const isHeading = (n: N | undefined, ...depths: number[]): boolean => !!n && n.type === "heading" && depths.includes(n.depth);
-
-/** One H2/H3 (or the intro): its heading plus every block up to the next H2/H3. */
-export interface SectionUnit {
-  level: 1 | 2 | 3;
-  /** explicit `<ManualAnchor>` placed right before the heading, if any */
-  manualAnchor?: string;
-  /** heading node; null for the intro (the page title is used) */
-  heading: N | null;
-  /** blocks after the heading; may contain H4-H6 headings and manualAnchor markers */
-  body: N[];
-}
 
 /**
  * Group top-level blocks by H2/H3. Content before the first H2/H3 (including a `# title`
