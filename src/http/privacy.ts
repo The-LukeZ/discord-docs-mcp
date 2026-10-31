@@ -27,7 +27,7 @@ export const privacyHtml = `<!doctype html>
 </ul>
 
 <h2>Cloudflare</h2>
-<p>The server runs on Cloudflare. Cloudflare processes IP addresses transiently in order to deliver requests. We do not receive, log or store them.</p>
+<p>The server runs on Cloudflare. Cloudflare processes IP addresses transiently in order to deliver requests. We do not log or store them.</p>
 
 <h2>Content and licence</h2>
 <p>The documentation served comes from Discord's public developer documentation (<a href="https://github.com/discord/discord-api-docs">discord/discord-api-docs</a>) and is licensed under CC-BY-SA 4.0. Every result links to its source page on docs.discord.com.</p>
