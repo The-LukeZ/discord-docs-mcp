@@ -4,7 +4,8 @@ Public, authless remote MCP server on Cloudflare Workers serving Discord's devel
 
 Content: Discord Developer Documentation, CC-BY-SA 4.0. Not affiliated with Discord.
 
-> **Notice:** Discord hosts an official, authless MCP server for its docs at <https://docs.discord.com/mcp>. It offers a generic documentation search and a read-only virtual filesystem over the pages. This project is an independent alternative, not a replacement. It adds structured lookups for endpoints, objects and enums, identifier-aware search, stable section ids, change tracking between refreshes, and answers pinned to a docs commit. If you only need general docs search, use the official server.
+> ![TIP]
+> Discord hosts an official, authless MCP server for its docs at <https://docs.discord.com/mcp>. It offers a generic documentation search and a read-only virtual filesystem over the pages. This project is an independent alternative, not a replacement. It adds structured lookups for endpoints, objects and enums, identifier-aware search, stable section ids, change tracking between refreshes, and answers pinned to a docs commit. If you only need general docs search, use the official server.
 
 ## Setup
 
@@ -61,8 +62,13 @@ Enable a Cloudflare notification for Workflow failures (dashboard: Notifications
 `GET /health` always returns HTTP 200 with JSON:
 
 ```json
-{ "commit": "<sha>", "last_success_at": "<ISO time>", "last_run_outcome": "published", "stale": false,
-  "counts": { "pages": 0, "sections": 0, "endpoints": 0, "objects": 0 } }
+{
+  "commit": "<sha>",
+  "last_success_at": "<ISO time>",
+  "last_run_outcome": "published",
+  "stale": false,
+  "counts": { "pages": 0, "sections": 0, "endpoints": 0, "objects": 0 }
+}
 ```
 
 `stale` is `true` when there has been no successful refresh for `STALE_AFTER_HOURS` (72) or there is none yet. `last_run_outcome` is `published`, `noop` or `failed`.
