@@ -70,7 +70,7 @@ export function extractChangelog(tree: Root, sections: ParsedSection[], pagePath
       id,
       date,
       tags: meta.tags,
-      title: meta.rssTitle ?? (firstLine ? firstLine.replace(/^#+\s*/, "").trim() : meta.label),
+      title: meta.rssTitle?.trim() || (firstLine ? firstLine.replace(/^#+\s*/, "").trim() : meta.label),
       description: meta.rssDescription ?? "",
       markdown,
       links,

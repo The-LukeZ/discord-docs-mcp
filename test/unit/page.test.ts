@@ -80,3 +80,12 @@ describe("parsePage", () => {
     expect(p.changelog[0].title).toBe("Heading line");
   });
 });
+
+describe("empty titles fall back", () => {
+  it("empty frontmatter title and empty rss title are ignored", async () => {
+    const content = ['---\ntitle: ""\n---', "# Real Title", '<Update label="January 2, 2026" tags={[]} rss={{ title: "  ", description: "D" }}>\n\n    first line here\n</Update>'].join("\n\n");
+    const p = await parsePage({ path: "developers/change-log.mdx", content }, ctx);
+    expect(p.meta.title).toBe("Real Title");
+    expect(p.changelog[0].title).toBe("first line here");
+  });
+});

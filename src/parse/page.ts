@@ -40,7 +40,7 @@ export async function parsePage(file: { path: string; content: string }, ctx: Pa
   const clean = cleanMdx(file.content, { pagePath: path, snippets: ctx.snippets });
   const { frontmatter, tree } = clean;
   const h1 = (tree.children as Array<{ type: string; depth?: number }>).find((n) => n.type === "heading" && n.depth === 1);
-  const title = frontmatter.title ?? ((h1 && toString(h1 as never).trim()) || path);
+  const title = frontmatter.title?.trim() || (h1 && toString(h1 as never).trim()) || path;
 
   const sections = await splitSections(tree, { path, title }, { splitChars: ctx.splitChars });
   const problems = [...clean.problems];
