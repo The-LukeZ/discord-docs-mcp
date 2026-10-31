@@ -330,3 +330,73 @@ export async function counts(
     changelog: r!.changelog,
   };
 }
+
+/** Section ids of the objects that have a field called `name` (case-insensitive), in page order. */
+export async function findFieldSectionIds(db: D1Database, snapshotId: number, name: string, limit = 20): Promise<string[]> {
+  const res = await db
+    .prepare(
+      `SELECT section_id FROM fields WHERE snapshot_id = ?1 AND lower(name) = lower(?2) AND section_id IS NOT NULL
+       ORDER BY rowid LIMIT ?3`,
+    )
+    .bind(snapshotId, name, limit)
+    .all<{ section_id: string }>();
+  return res.results.map((r) => r.section_id);
+}
+
+/**
+ * Section ids of the enums that have a row key `key` (case-insensitive). Stored keys can still carry the footnote
+ * marker of the docs table (`ADMINISTRATOR *`), so trailing spaces, `*`, `†`, `‡` and `§` are ignored.
+ */
+export async function findEnumKeySectionIds(db: D1Database, snapshotId: number, key: string, limit = 20): Promise<string[]> {
+  const res = await db
+    .prepare(
+      `SELECT section_id FROM enum_keys WHERE snapshot_id = ?1 AND lower(rtrim(key, ' *†‡§')) = lower(?2) AND section_id IS NOT NULL
+       ORDER BY rowid LIMIT ?3`,
+    )
+    .bind(snapshotId, key, limit)
+    .all<{ section_id: string }>();
+  return res.results.map((r) => r.section_id);
+}
+
+export interface SectionSummary {
+  id: string;
+  baseId: string;
+  area: string;
+  anchor: string;
+  headingPath: string[];
+  markdown: string;
+  pageTitle: string;
+  /** public url of the section: page url plus `#anchor` (none for a page intro) */
+  url: string;
+}
+
+/** Sections by id (part ids included) joined with their page, keyed by section id. Unknown ids are absent. */
+export async function getSectionSummaries(db: D1Database, snapshotId: number, ids: string[]): Promise<Map<string, SectionSummary>> {
+  const out = new Map<string, SectionSummary>();
+  const unique = [...new Set(ids)];
+  for (let i = 0; i < unique.length; i += 50) {
+    const part = unique.slice(i, i + 50);
+    const marks = part.map((_, k) => `?${k + 2}`).join(", ");
+    const res = await db
+      .prepare(
+        `SELECT s.id AS id, s.base_id AS base_id, s.area AS area, s.anchor AS anchor, s.heading_path AS heading_path,
+                s.markdown AS markdown, p.title AS title, p.url AS url
+         FROM sections s JOIN pages p ON p.snapshot_id = s.snapshot_id AND p.path = s.page_path
+         WHERE s.snapshot_id = ?1 AND s.id IN (${marks})`,
+      )
+      .bind(snapshotId, ...part)
+      .all<Row>();
+    for (const r of res.results)
+      out.set(r.id, {
+        id: r.id,
+        baseId: r.base_id,
+        area: r.area,
+        anchor: r.anchor,
+        headingPath: json<string[]>(r.heading_path),
+        markdown: r.markdown ?? "",
+        pageTitle: r.title ?? "",
+        url: r.anchor ? `${r.url}#${r.anchor}` : r.url,
+      });
+  }
+  return out;
+}
