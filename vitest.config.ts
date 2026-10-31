@@ -18,7 +18,8 @@ export default defineConfig({
             const migrations = await readD1Migrations(path.join(import.meta.dirname, "migrations"));
             return {
               wrangler: { configPath: "./wrangler.jsonc" },
-              miniflare: { bindings: { TEST_MIGRATIONS: migrations } },
+              // ADMIN_TOKEN is a dummy for tests; the real one is a Worker secret.
+              miniflare: { bindings: { TEST_MIGRATIONS: migrations, ADMIN_TOKEN: "test-admin-token" } },
             };
           }),
         ],

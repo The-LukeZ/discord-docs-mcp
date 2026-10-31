@@ -26,3 +26,41 @@ Then set `PUBLIC_ORIGIN` in `wrangler.jsonc` to the deployed origin, apply migra
 - `npm run test:unit`, `npm run test:worker`
 - `npm run typecheck`
 - `npm run types` regenerates `worker-configuration.d.ts` (rerun after editing `wrangler.jsonc`)
+
+## Operations
+
+### Secrets
+
+The Worker needs two secrets. They are Worker secrets only: never put them in `wrangler.jsonc`, the repo or a `.dev.vars` you commit.
+
+```bash
+npx wrangler secret put GITHUB_FETCH_TOKEN   # read-only GitHub token used to read discord/discord-api-docs
+npx wrangler secret put ADMIN_TOKEN          # bearer token for POST /admin/refresh
+```
+
+If `ADMIN_TOKEN` is not set, `/admin/refresh` rejects every request.
+
+### First deploy and baseline
+
+After the first deploy the index is empty (`/health` reports `stale: true` and zero counts). Build the baseline once with a manual refresh:
+
+```bash
+curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" https://<your-worker>/admin/refresh
+```
+
+The response is `202 {"instanceId":"manual-<epoch ms>"}`. Add `?force=1` to re-parse the already indexed commit. After that, a daily cron (04:17 UTC) refreshes the index; it uses the instance id `cron-YYYY-MM-DD`, so a day never runs twice.
+
+### Workflow failure notification
+
+Enable a Cloudflare notification for Workflow failures (dashboard: Notifications, add a Workflows notification for failed instances) so a failed refresh does not go unnoticed. A failed run never changes what readers see; the previous snapshot stays live.
+
+### Checking health
+
+`GET /health` always returns HTTP 200 with JSON:
+
+```json
+{ "commit": "<sha>", "last_success_at": "<ISO time>", "last_run_outcome": "published", "stale": false,
+  "counts": { "pages": 0, "sections": 0, "endpoints": 0, "objects": 0 } }
+```
+
+`stale` is `true` when there has been no successful refresh for `STALE_AFTER_HOURS` (72) or there is none yet. `last_run_outcome` is `published`, `noop` or `failed`.
