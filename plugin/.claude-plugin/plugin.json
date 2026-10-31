@@ -4,5 +4,6 @@
   "description": "Search and read Discord's developer docs via MCP",
   "author": { "name": "The-LukeZ" },
   "license": "MIT",
-  "repository": "https://github.com/The-LukeZ/discord-docs-mcp"
+  "repository": "https://github.com/The-LukeZ/discord-docs-mcp",
+  "privacyPolicyUrl": "https://bugcord-mcp.dev/privacy"
 }
