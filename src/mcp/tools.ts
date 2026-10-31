@@ -371,9 +371,9 @@ function parseSince(v: string): string | null {
   return Number.isNaN(t.getTime()) || t.toISOString().slice(0, 10) !== day ? null : day;
 }
 
-export async function recentChangesTool(db: D1Database, cfg: Config, input: { since?: string; source?: "changelog" | "docs" | "both"; limit?: number }): Promise<ToolResult> {
+export async function recentChangesTool(db: D1Database, cfg: Config, input: { since?: string; source?: "changelog" | "docs" | "both"; limit?: number } = {}): Promise<ToolResult> {
   return run(db, cfg, async (info) => {
-    const source = str(input?.source) || "both";
+    const source = str(input.source) || "both";
     if (source !== "changelog" && source !== "docs" && source !== "both") return invalid('source must be "changelog", "docs" or "both".');
     const sinceText = str(input.since);
     const since = sinceText === "" ? new Date(Date.now() - CHANGES_DEFAULT_DAYS * 86_400_000).toISOString().slice(0, 10) : parseSince(sinceText);
@@ -397,6 +397,13 @@ export async function recentChangesTool(db: D1Database, cfg: Config, input: { si
       return lines.length > 0 ? `## ${title}\n${lines.join("\n")}` : "";
     };
     const body = [section("Changelog", "changelog"), section("Documentation changes", "docs")].filter(Boolean).join("\n\n");
-    return ok(capBody(cfg, `Changes since ${since} (newest first, up to ${limit}):\n\n${body}`, `a url from the list`));
+    const text = `Changes since ${since} (newest first, up to ${limit}):\n\n${body}`;
+    const { slice, nextOffset } = truncate(text, 0, cfg.responseCharCap);
+    // No get_section hint here: a changelog URL may not resolve to a section.
+    return ok(
+      nextOffset === null
+        ? text
+        : `${slice}\n\n[Truncated at ${slice.length} of ${text.length} characters. Narrow the request with a smaller limit, a later since date or a single source.]`,
+    );
   });
 }

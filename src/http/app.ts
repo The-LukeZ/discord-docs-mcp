@@ -2,12 +2,26 @@ import { Hono } from "hono";
 import type { MiddlewareHandler } from "hono";
 import { bearerAuth } from "hono/bearer-auth";
 import { timingSafeEqual } from "hono/utils/buffer";
+import { createMcpHandler } from "agents/mcp/server";
 import { readConfig } from "../config";
 import { log } from "../log";
+import { createServer } from "../mcp/server";
 import { counts, getSnapshotInfo } from "../store/read";
+import { privacyHtml } from "./privacy";
 
-export function createApp(): Hono<{ Bindings: Env }> {
+const REPO_URL = "https://github.com/The-LukeZ/discord-docs-mcp";
+
+/** `limiterName` is "global" in production. Only tests pass another name, to get isolated limiter counters. */
+export function createApp(opts: { limiterName?: string } = {}): Hono<{ Bindings: Env }> {
   const app = new Hono<{ Bindings: Env }>();
+
+  app.get("/", (c) => c.redirect(REPO_URL, 302));
+
+  app.get("/privacy", (c) => c.html(privacyHtml));
+
+  // No auth: the endpoint is public (spec section 9). The handler is stateless and builds a fresh server per request.
+  // Only `env` reaches the server; the Request goes to the MCP transport and never to the guard or the tools.
+  app.all("/mcp", (c) => createMcpHandler(() => createServer(c.env, opts.limiterName))(c.req.raw, c.env, c.executionCtx as ExecutionContext));
 
   app.get("/health", async (c) => {
     const db = c.env.DB;

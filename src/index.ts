@@ -1,11 +1,9 @@
-import { DurableObject } from "cloudflare:workers";
 import { createApp } from "./http/app";
 import { startCronRefresh } from "./refresh/workflow";
 
 export { RefreshWorkflow } from "./refresh/workflow";
-
-// Stub: replaced by the real limiter in a later task.
-export class GlobalLimiter extends DurableObject<Env> {}
+// Re-exported from the entry module so the wrangler Durable Object migration finds the class.
+export { GlobalLimiter } from "./limit/limiter";
 
 const app = createApp();
 

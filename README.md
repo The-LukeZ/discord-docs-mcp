@@ -72,3 +72,16 @@ Enable a Cloudflare notification for Workflow failures (dashboard: Notifications
 ```
 
 `stale` is `true` when there has been no successful refresh for `STALE_AFTER_HOURS` (72) or there is none yet. `last_run_outcome` is `published`, `noop` or `failed`.
+
+### Manual end-to-end check
+
+The automated tests do not cover a real GitHub fetch. Run this once locally with your secrets in `.dev.vars` (`GITHUB_FETCH_TOKEN`, `ADMIN_TOKEN`):
+
+```bash
+npx wrangler dev
+curl -X POST localhost:8787/admin/refresh -H "Authorization: Bearer $ADMIN_TOKEN"
+# wait until GET localhost:8787/health shows a commit
+npx @modelcontextprotocol/inspector   # connect to http://localhost:8787/mcp (Streamable HTTP) and run search_docs with GUILD_MEMBERS
+```
+
+Expected: Gateway Intents is in the top 3 results. The public MCP URL is `https://bugcord-mcp.dev/mcp`. Local workerd does not implement Durable Object jurisdictions, so locally the limiter runs without the `eu` jurisdiction; on Cloudflare it is always `eu`.
