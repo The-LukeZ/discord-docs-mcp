@@ -1,0 +1,332 @@
+import type { ParamTable, ParsedField } from "../parse/types";
+
+/**
+ * Read side of the snapshot store. Every function except `getSnapshotInfo` and `listChangeRecords` takes the
+ * snapshot id to read from; only `getSnapshotInfo` looks at `refresh_state`, so a request resolves the current
+ * snapshot once and reads a consistent view even while a refresh publishes.
+ */
+
+export interface SnapshotInfo {
+  id: number;
+  commitSha: string;
+  /** when the index was last confirmed current (last successful refresh), ISO 8601 */
+  indexedAt: string;
+  /** true when the last successful refresh is older than `staleAfterHours` */
+  stale: boolean;
+}
+
+export interface SectionRow {
+  id: string;
+  baseId: string;
+  pagePath: string;
+  area: string;
+  anchor: string;
+  heading: string;
+  headingPath: string[];
+  level: number;
+  part: number;
+  ord: number;
+  markdown: string;
+  contentHash: string;
+}
+
+export interface PageRow {
+  path: string;
+  title: string;
+  sidebarTitle: string | null;
+  description: string | null;
+  breadcrumb: string[];
+  url: string;
+  blobSha: string | null;
+  snippetDeps: string[];
+  problems: string[];
+}
+
+export interface EndpointRow {
+  name: string;
+  method: string;
+  pathTemplate: string;
+  normalizedPath: string;
+  sectionId: string;
+  params: ParamTable[];
+}
+
+export interface ObjectRow {
+  name: string;
+  sectionId: string;
+  fields: ParsedField[];
+}
+
+export interface EnumRow {
+  name: string;
+  sectionId: string;
+  ownerObject: string | null;
+  columns: string[];
+  rows: string[][];
+}
+
+export interface ChangelogRow {
+  id: string;
+  date: string;
+  tags: string[];
+  title: string;
+  description: string;
+  markdown: string;
+  links: string[];
+  url: string;
+}
+
+export interface ChangeRecordRow {
+  runId: string;
+  commitSha: string;
+  date: string;
+  sectionId: string;
+  heading: string;
+  url: string;
+  changeType: "added" | "modified" | "removed";
+}
+
+const json = <T>(s: unknown): T => JSON.parse(typeof s === "string" ? s : "[]") as T;
+type Row = Record<string, any>;
+
+export async function getSnapshotInfo(db: D1Database, now: Date, staleAfterHours: number): Promise<SnapshotInfo | null> {
+  const r = await db
+    .prepare(
+      `SELECT s.id AS id, s.commit_sha AS commit_sha, s.created_at AS created_at, rs.last_success_at AS last_success_at
+       FROM refresh_state rs JOIN snapshots s ON s.id = rs.current_snapshot
+       WHERE rs.id = 1`,
+    )
+    .first<Row>();
+  if (!r) return null;
+  const indexedAt: string = r.last_success_at ?? r.created_at ?? "";
+  const t = Date.parse(indexedAt);
+  return {
+    id: r.id,
+    commitSha: r.commit_sha,
+    indexedAt,
+    stale: Number.isNaN(t) || now.getTime() - t > staleAfterHours * 3600_000,
+  };
+}
+
+const SECTION_COLS = "id, base_id, page_path, area, anchor, heading, heading_path, level, part, ord, markdown, content_hash";
+const toSection = (r: Row): SectionRow => ({
+  id: r.id,
+  baseId: r.base_id,
+  pagePath: r.page_path,
+  area: r.area,
+  anchor: r.anchor,
+  heading: r.heading,
+  headingPath: json<string[]>(r.heading_path),
+  level: r.level,
+  part: r.part,
+  ord: r.ord,
+  markdown: r.markdown,
+  contentHash: r.content_hash,
+});
+
+/** All parts of one section, in part order. */
+export async function getSectionsByBaseId(db: D1Database, snapshotId: number, baseId: string): Promise<SectionRow[]> {
+  const res = await db
+    .prepare(`SELECT ${SECTION_COLS} FROM sections WHERE snapshot_id = ?1 AND base_id = ?2 ORDER BY part`)
+    .bind(snapshotId, baseId)
+    .all<Row>();
+  return res.results.map(toSection);
+}
+
+/** Every section part of a page, in page order. */
+export async function getPageSections(db: D1Database, snapshotId: number, pagePath: string): Promise<SectionRow[]> {
+  const res = await db
+    .prepare(`SELECT ${SECTION_COLS} FROM sections WHERE snapshot_id = ?1 AND page_path = ?2 ORDER BY ord, part`)
+    .bind(snapshotId, pagePath)
+    .all<Row>();
+  return res.results.map(toSection);
+}
+
+export async function getPage(db: D1Database, snapshotId: number, pagePath: string): Promise<PageRow | null> {
+  const r = await db
+    .prepare(
+      "SELECT path, title, sidebar_title, description, breadcrumb, url, blob_sha, snippet_deps, problems FROM pages WHERE snapshot_id = ?1 AND path = ?2",
+    )
+    .bind(snapshotId, pagePath)
+    .first<Row>();
+  if (!r) return null;
+  return {
+    path: r.path,
+    title: r.title,
+    sidebarTitle: r.sidebar_title,
+    description: r.description,
+    breadcrumb: json<string[]>(r.breadcrumb),
+    url: r.url,
+    blobSha: r.blob_sha,
+    snippetDeps: json<string[]>(r.snippet_deps),
+    problems: json<string[]>(r.problems),
+  };
+}
+
+/** Follow redirects (at most 5 hops, cycle-safe); returns `path` itself when there is none. */
+export async function resolveRedirect(db: D1Database, snapshotId: number, path: string): Promise<string> {
+  let current = path;
+  const seen = new Set([current]);
+  for (let hop = 0; hop < 5; hop++) {
+    const r = await db
+      .prepare("SELECT destination FROM redirects WHERE snapshot_id = ?1 AND source = ?2 LIMIT 1")
+      .bind(snapshotId, current)
+      .first<{ destination: string }>();
+    if (!r || seen.has(r.destination)) return current;
+    current = r.destination;
+    seen.add(current);
+  }
+  return current;
+}
+
+/**
+ * Section id that a `#anchor` on a page lands in: the section's own anchor, or an H4-H6 / stray manual anchor
+ * inside it. Null when the page has no such anchor.
+ */
+export async function resolveAnchor(db: D1Database, snapshotId: number, pagePath: string, anchor: string): Promise<string | null> {
+  const r = await db
+    .prepare("SELECT section_id FROM section_anchors WHERE snapshot_id = ?1 AND page_path = ?2 AND anchor = ?3 LIMIT 1")
+    .bind(snapshotId, pagePath, anchor)
+    .first<{ section_id: string }>();
+  return r?.section_id ?? null;
+}
+
+export async function findEndpoints(
+  db: D1Database,
+  snapshotId: number,
+  q: { name?: string; method?: string; normalizedPath?: string; limit?: number },
+): Promise<EndpointRow[]> {
+  const where = ["snapshot_id = ?1"];
+  const bind: unknown[] = [snapshotId];
+  const add = (cond: string, v: unknown) => {
+    bind.push(v);
+    where.push(cond.replace("?", `?${bind.length}`));
+  };
+  if (q.name !== undefined) add("lower(name) = lower(?)", q.name);
+  if (q.method !== undefined) add("upper(method) = upper(?)", q.method);
+  if (q.normalizedPath !== undefined) add("normalized_path = ?", q.normalizedPath);
+  bind.push(q.limit ?? 50);
+  const res = await db
+    .prepare(
+      `SELECT name, method, path_template, normalized_path, section_id, params FROM endpoints
+       WHERE ${where.join(" AND ")} ORDER BY rowid LIMIT ?${bind.length}`,
+    )
+    .bind(...bind)
+    .all<Row>();
+  return res.results.map((r) => ({
+    name: r.name,
+    method: r.method,
+    pathTemplate: r.path_template,
+    normalizedPath: r.normalized_path,
+    sectionId: r.section_id,
+    params: json<ParamTable[]>(r.params),
+  }));
+}
+
+/** Case-insensitive object lookup; first match in page order. */
+export async function findObject(db: D1Database, snapshotId: number, name: string): Promise<ObjectRow | null> {
+  const r = await db
+    .prepare("SELECT name, section_id, fields FROM objects WHERE snapshot_id = ?1 AND lower(name) = lower(?2) ORDER BY rowid LIMIT 1")
+    .bind(snapshotId, name)
+    .first<Row>();
+  return r ? { name: r.name, sectionId: r.section_id, fields: json<ParsedField[]>(r.fields) } : null;
+}
+
+/** Enums by name and/or by a key (row name) they contain, case-insensitive. No criteria gives no result. */
+export async function findEnums(db: D1Database, snapshotId: number, q: { name?: string; key?: string; limit?: number }): Promise<EnumRow[]> {
+  const any: string[] = [];
+  const bind: unknown[] = [snapshotId];
+  if (q.name !== undefined) {
+    bind.push(q.name);
+    any.push(`lower(e.name) = lower(?${bind.length})`);
+  }
+  if (q.key !== undefined) {
+    bind.push(q.key);
+    any.push(
+      `EXISTS (SELECT 1 FROM enum_keys k WHERE k.snapshot_id = e.snapshot_id AND k.enum_name = e.name AND k.section_id IS e.section_id AND lower(k.key) = lower(?${bind.length}))`,
+    );
+  }
+  if (any.length === 0) return [];
+  bind.push(q.limit ?? 50);
+  const res = await db
+    .prepare(
+      `SELECT e.name, e.section_id, e.owner_object, e.columns, e.rows FROM enums e
+       WHERE e.snapshot_id = ?1 AND (${any.join(" OR ")}) ORDER BY e.rowid LIMIT ?${bind.length}`,
+    )
+    .bind(...bind)
+    .all<Row>();
+  return res.results.map((r) => ({
+    name: r.name,
+    sectionId: r.section_id,
+    ownerObject: r.owner_object,
+    columns: json<string[]>(r.columns),
+    rows: json<string[][]>(r.rows),
+  }));
+}
+
+/** Changelog entries dated `since` (YYYY-MM-DD) or later, newest first (same day: page order). */
+export async function listChangelog(db: D1Database, snapshotId: number, since: string, limit: number): Promise<ChangelogRow[]> {
+  const res = await db
+    .prepare(
+      `SELECT id, date, tags, title, description, markdown, links, url FROM changelog_entries
+       WHERE snapshot_id = ?1 AND date >= ?2 ORDER BY date DESC, rowid LIMIT ?3`,
+    )
+    .bind(snapshotId, since, limit)
+    .all<Row>();
+  return res.results.map((r) => ({
+    id: r.id,
+    date: r.date,
+    tags: json<string[]>(r.tags),
+    title: r.title,
+    description: r.description,
+    markdown: r.markdown,
+    links: json<string[]>(r.links),
+    url: r.url,
+  }));
+}
+
+/** Documentation change records dated `since` or later, newest first. Records belong to runs, not snapshots. */
+export async function listChangeRecords(db: D1Database, since: string, limit: number): Promise<ChangeRecordRow[]> {
+  const res = await db
+    .prepare(
+      `SELECT run_id, commit_sha, date, section_id, heading, url, change_type FROM change_records
+       WHERE date >= ?1 ORDER BY date DESC, rowid LIMIT ?2`,
+    )
+    .bind(since, limit)
+    .all<Row>();
+  return res.results.map((r) => ({
+    runId: r.run_id,
+    commitSha: r.commit_sha,
+    date: r.date,
+    sectionId: r.section_id,
+    heading: r.heading,
+    url: r.url,
+    changeType: r.change_type,
+  }));
+}
+
+export async function counts(
+  db: D1Database,
+  snapshotId: number,
+): Promise<{ pages: number; sections: number; endpoints: number; objects: number; enums: number; changelog: number }> {
+  const r = await db
+    .prepare(
+      `SELECT
+         (SELECT count(*) FROM pages WHERE snapshot_id = ?1) AS pages,
+         (SELECT count(*) FROM sections WHERE snapshot_id = ?1) AS sections,
+         (SELECT count(*) FROM endpoints WHERE snapshot_id = ?1) AS endpoints,
+         (SELECT count(*) FROM objects WHERE snapshot_id = ?1) AS objects,
+         (SELECT count(*) FROM enums WHERE snapshot_id = ?1) AS enums,
+         (SELECT count(*) FROM changelog_entries WHERE snapshot_id = ?1) AS changelog`,
+    )
+    .bind(snapshotId)
+    .first<Row>();
+  return {
+    pages: r!.pages,
+    sections: r!.sections,
+    endpoints: r!.endpoints,
+    objects: r!.objects,
+    enums: r!.enums,
+    changelog: r!.changelog,
+  };
+}

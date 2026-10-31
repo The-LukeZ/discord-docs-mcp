@@ -59,6 +59,15 @@ CREATE TABLE sections (
 );
 CREATE INDEX idx_sections_page ON sections (snapshot_id, page_path);
 
+-- Every anchor that resolves on a page (section anchor plus H4-H6 / stray manual anchors) -> containing section.
+CREATE TABLE section_anchors (
+  snapshot_id INTEGER NOT NULL,
+  page_path TEXT NOT NULL,
+  anchor TEXT NOT NULL,
+  section_id TEXT NOT NULL
+);
+CREATE INDEX idx_section_anchors ON section_anchors (snapshot_id, page_path, anchor);
+
 CREATE VIRTUAL TABLE sections_fts USING fts5(
   snapshot_id UNINDEXED,
   section_id UNINDEXED,
