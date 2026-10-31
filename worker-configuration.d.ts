@@ -3,7 +3,7 @@
 // Runtime types generated with workerd@1.20261023.1 2026-10-30 nodejs_compat
 interface __BaseEnv_Env {
 	DB: D1Database;
-	PUBLIC_ORIGIN: "https://discord-docs-mcp.example.workers.dev";
+	PUBLIC_ORIGIN: "https://bugcord-mcp.dev";
 	CAP_PER_MINUTE: "300";
 	CAP_PER_DAY: "30000";
 	SECTION_SPLIT_CHARS: "6000";
