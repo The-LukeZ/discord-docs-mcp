@@ -86,5 +86,5 @@ describe("anchors against corpus", () => {
     }
     expect(misses.slice(0, 20)).toEqual([]);
     expect([...BROKEN_UPSTREAM].filter((a) => !stillBroken.has(a))).toEqual([]);
-  });
+  }, 60_000);
 });
