@@ -1,0 +1,38 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "discord-docs-mcp",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-30",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "discord-docs",
+      // Placeholder. Replace with the id from `wrangler d1 create discord-docs --jurisdiction=eu`.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [{ "name": "LIMITER", "class_name": "GlobalLimiter" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GlobalLimiter"] }],
+  "workflows": [
+    {
+      "name": "discord-docs-refresh",
+      "binding": "REFRESH_WORKFLOW",
+      "class_name": "RefreshWorkflow",
+      "jurisdiction": "eu"
+    }
+  ],
+  "triggers": { "crons": ["17 4 * * *"] },
+  "vars": {
+    "PUBLIC_ORIGIN": "https://discord-docs-mcp.example.workers.dev",
+    "CAP_PER_MINUTE": "300",
+    "CAP_PER_DAY": "30000",
+    "SECTION_SPLIT_CHARS": "6000",
+    "RESPONSE_CHAR_CAP": "32000",
+    "STALE_AFTER_HOURS": "72"
+  },
+  "observability": { "enabled": true }
+}
