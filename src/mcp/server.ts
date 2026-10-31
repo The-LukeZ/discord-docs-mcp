@@ -17,13 +17,13 @@ export const CACHE_VERSION = "v1";
  * The snapshot id keeps two snapshots of the same commit apart; the version isolates code changes.
  */
 export function toolCacheUrl(
-  info: { commitSha: string; id: string },
+  info: { commitSha: string; id: number | string },
   tool: string,
   digest: string,
   version: string = CACHE_VERSION,
 ): string {
   const seg = encodeURIComponent;
-  return `https://cache.internal/${seg(info.commitSha)}/${seg(info.id)}/${seg(version)}/${seg(tool)}/${digest}`;
+  return `https://cache.internal/${seg(info.commitSha)}/${seg(String(info.id))}/${seg(version)}/${seg(tool)}/${digest}`;
 }
 
 /** Recursively sort object keys and trim strings, so equivalent argument objects serialize identically. */
