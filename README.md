@@ -10,7 +10,7 @@ Content: Discord Developer Documentation, CC-BY-SA 4.0. Not affiliated with Disc
 ## Requirements
 
 - A Cloudflare account on the **Workers Paid** plan. The refresh runs as a Workflow, and the Free plan allows only 10 ms of CPU and 50 external subrequests per invocation, so the refresh cannot run there.
-- Node.js and npm.
+- Node.js and pnpm.
 
 ## Routes
 
@@ -25,25 +25,25 @@ Content: Discord Developer Documentation, CC-BY-SA 4.0. Not affiliated with Disc
 ## Setup
 
 ```bash
-npm install
+pnpm install
 ```
 
 ### Create the EU D1 database
 
 ```bash
-npx wrangler@latest d1 create discord-docs --jurisdiction=eu
+pnpm dlx wrangler@latest d1 create discord-docs --jurisdiction=eu
 ```
 
 Paste the returned `database_id` into `wrangler.jsonc`. Confirm in the dashboard that the database shows jurisdiction EU. A database created without `eu` must be deleted and recreated.
 
-`PUBLIC_ORIGIN` in `wrangler.jsonc` already holds the production origin `https://bugcord-mcp.dev` and is currently informational only; change it only if you deploy under another origin. Apply migrations with `npx wrangler d1 migrations apply discord-docs --remote`, and set secrets `GITHUB_FETCH_TOKEN` and `ADMIN_TOKEN`.
+`PUBLIC_ORIGIN` in `wrangler.jsonc` already holds the production origin `https://bugcord-mcp.dev` and is currently informational only; change it only if you deploy under another origin. Apply migrations with `pnpm exec wrangler d1 migrations apply discord-docs --remote`, and set secrets `GITHUB_FETCH_TOKEN` and `ADMIN_TOKEN`.
 
 ## Scripts
 
-- `npm test` runs all vitest projects (`unit` on node, `worker` on workerd via `@cloudflare/vitest-plugin`)
-- `npm run test:unit`, `npm run test:worker`
-- `npm run typecheck`
-- `npm run types` regenerates `worker-configuration.d.ts` (rerun after editing `wrangler.jsonc`)
+- `pnpm test` runs all vitest projects (`unit` on node, `worker` on workerd via `@cloudflare/vitest-plugin`)
+- `pnpm run test:unit`, `pnpm run test:worker`
+- `pnpm run typecheck`
+- `pnpm run types` regenerates `worker-configuration.d.ts` (rerun after editing `wrangler.jsonc`)
 
 ## Operations
 
@@ -52,8 +52,8 @@ Paste the returned `database_id` into `wrangler.jsonc`. Confirm in the dashboard
 The Worker needs two secrets. They are Worker secrets only: never put them in `wrangler.jsonc`, the repo or a `.dev.vars` you commit.
 
 ```bash
-npx wrangler secret put GITHUB_FETCH_TOKEN   # read-only GitHub token used to read discord/discord-api-docs
-npx wrangler secret put ADMIN_TOKEN          # bearer token for POST /admin/refresh
+pnpm exec wrangler secret put GITHUB_FETCH_TOKEN   # read-only GitHub token used to read discord/discord-api-docs
+pnpm exec wrangler secret put ADMIN_TOKEN          # bearer token for POST /admin/refresh
 ```
 
 If `ADMIN_TOKEN` is not set, `/admin/refresh` rejects every request.
@@ -93,10 +93,10 @@ Enable a Cloudflare notification for Workflow failures (dashboard: Notifications
 The automated tests do not cover a real GitHub fetch. Run this once locally with your secrets in `.dev.vars` (`GITHUB_FETCH_TOKEN`, `ADMIN_TOKEN`):
 
 ```bash
-npx wrangler dev
+pnpm exec wrangler dev
 curl -X POST localhost:8787/admin/refresh -H "Authorization: Bearer $ADMIN_TOKEN"
 # wait until GET localhost:8787/health shows a commit
-npx @modelcontextprotocol/inspector   # connect to http://localhost:8787/mcp (Streamable HTTP) and run search_docs with GUILD_MEMBERS
+pnpm dlx @modelcontextprotocol/inspector   # connect to http://localhost:8787/mcp (Streamable HTTP) and run search_docs with GUILD_MEMBERS
 ```
 
 Expected: Gateway Intents is in the top 3 results. The public MCP URL is `https://bugcord-mcp.dev/mcp`. Local workerd does not implement Durable Object jurisdictions, so locally the limiter runs without the `eu` jurisdiction; on Cloudflare it is always `eu`.
