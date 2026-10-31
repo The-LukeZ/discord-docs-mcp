@@ -121,6 +121,12 @@ describe("parseImports", () => {
     expect(parse('import E, { F } from "/e.mdx"')).toEqual({ E: "/e.mdx", F: "/e.mdx" });
     expect(parse('import {\n  G,\n  H,\n} from "/g.mdx";\nimport I from "/i.mdx";')).toEqual({ G: "/g.mdx", H: "/g.mdx", I: "/i.mdx" });
   });
+  it("keeps imports whose module path contains the word import", () => {
+    expect(parse('import A from "/snippets/import-guide.mdx"; import B from "/snippets/import/x.mdx"')).toEqual({
+      A: "/snippets/import-guide.mdx",
+      B: "/snippets/import/x.mdx",
+    });
+  });
   it("handles pathological whitespace in linear time", () => {
     const start = performance.now();
     parseImports("import" + " ".repeat(20000) + '"x"', new Map());

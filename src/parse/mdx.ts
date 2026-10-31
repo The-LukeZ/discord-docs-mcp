@@ -98,7 +98,7 @@ const MAX_ESM_CHARS = 20_000;
  */
 export function parseImports(esm: string, into: Map<string, string>): void {
   const text = esm.slice(0, MAX_ESM_CHARS).replace(/\s+/g, " ");
-  const pieces = text.split(/(?<![\w$])import(?![\w$])/).slice(1);
+  const pieces = text.split(/(?:^|(?<=[\s;]))import(?=\s)/).slice(1);
   for (const piece of pieces) {
     const m = piece.match(/^\s+([^'"]+?)\s+from\s+['"]([^'"]+)['"]/);
     if (!m) continue;
