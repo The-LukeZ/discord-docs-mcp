@@ -1,8 +1,10 @@
 import { Hono } from "hono";
+import type { MiddlewareHandler } from "hono";
+import { bearerAuth } from "hono/bearer-auth";
+import { timingSafeEqual } from "hono/utils/buffer";
 import { readConfig } from "../config";
 import { log } from "../log";
 import { counts, getSnapshotInfo } from "../store/read";
-import { isAuthorized } from "./auth";
 
 export function createApp(): Hono<{ Bindings: Env }> {
   const app = new Hono<{ Bindings: Env }>();
@@ -14,12 +16,18 @@ export function createApp(): Hono<{ Bindings: Env }> {
     const [info, state] = await Promise.all([
       getSnapshotInfo(db, now, cfg.staleAfterHours),
       db
-        .prepare("SELECT last_success_at, last_run_outcome FROM refresh_state WHERE id = 1")
-        .first<{ last_success_at: string | null; last_run_outcome: string | null }>(),
+        .prepare(
+          "SELECT last_success_at, last_run_outcome FROM refresh_state WHERE id = 1",
+        )
+        .first<{
+          last_success_at: string | null;
+          last_run_outcome: string | null;
+        }>(),
     ]);
     const lastSuccess = state?.last_success_at ?? null;
     const t = lastSuccess === null ? NaN : Date.parse(lastSuccess);
-    const stale = Number.isNaN(t) || now.getTime() - t > cfg.staleAfterHours * 3600_000;
+    const stale =
+      Number.isNaN(t) || now.getTime() - t > cfg.staleAfterHours * 3600_000;
     const n = info ? await counts(db, info.id) : null;
     return c.json({
       commit: info?.commitSha ?? null,
@@ -35,10 +43,25 @@ export function createApp(): Hono<{ Bindings: Env }> {
     });
   });
 
-  app.post("/admin/refresh", async (c) => {
-    if (!(await isAuthorized(c.req.header("Authorization"), c.env.ADMIN_TOKEN))) {
-      return c.json({ error: "unauthorized" }, 401);
-    }
+  // The token is a per-request secret binding, so the middleware is built per request. `timingSafeEqual` hashes both
+  // sides first. An unset or empty ADMIN_TOKEN never authenticates. A malformed Authorization header is answered
+  // 401 like a wrong token (hono's default for it is 400).
+  const unauthorized = () =>
+    new Response(JSON.stringify({ error: "unauthorized" }), {
+      status: 401,
+      headers: { "content-type": "application/json" },
+    });
+  const adminAuth: MiddlewareHandler<{ Bindings: Env }> = (c, next) =>
+    bearerAuth<{ Bindings: Env }>({
+      verifyToken: async (token, ctx) =>
+        !!ctx.env.ADMIN_TOKEN &&
+        (await timingSafeEqual(ctx.env.ADMIN_TOKEN, token)),
+      noAuthenticationHeader: { message: unauthorized },
+      invalidAuthenticationHeader: { message: unauthorized },
+      invalidToken: { message: unauthorized },
+    })(c, next);
+
+  app.post("/admin/refresh", adminAuth, async (c) => {
     const force = c.req.query("force") === "1";
     // A fresh epoch id never collides with an earlier manual run.
     const instanceId = `manual-${Date.now()}`;

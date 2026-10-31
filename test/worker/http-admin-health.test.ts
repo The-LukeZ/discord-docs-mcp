@@ -2,7 +2,6 @@ import { SELF, env, introspectWorkflow } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import worker from "../../src/index";
 import { createApp } from "../../src/http/app";
-import { isAuthorized } from "../../src/http/auth";
 import { cronInstanceId, startCronRefresh } from "../../src/refresh/workflow";
 import { indexCorpus } from "./corpus-index";
 
@@ -27,26 +26,6 @@ function fakeWorkflow(create?: (opts: Created) => Promise<unknown>) {
 
 /** A no-op head for `resolve-head`, so a real workflow instance ends after one step without any network. */
 const noopHead = (sha: string) => ({ sha, startedAt: "2026-10-31T00:00:00.000Z", baseSnapshot: 1, baseCommit: sha, noop: true });
-
-describe("isAuthorized", () => {
-  it("accepts only the exact Bearer token", async () => {
-    expect(await isAuthorized("Bearer secret", "secret")).toBe(true);
-    expect(await isAuthorized("Bearer secre", "secret")).toBe(false);
-    expect(await isAuthorized("Bearer secret2", "secret")).toBe(false);
-    expect(await isAuthorized("bearer secret", "secret")).toBe(false);
-    expect(await isAuthorized("secret", "secret")).toBe(false);
-    expect(await isAuthorized(undefined, "secret")).toBe(false);
-    expect(await isAuthorized(null, "secret")).toBe(false);
-  });
-
-  it("never accepts when the configured token is unset or empty", async () => {
-    expect(await isAuthorized("Bearer ", "")).toBe(false);
-    expect(await isAuthorized("Bearer", "")).toBe(false);
-    expect(await isAuthorized("", "")).toBe(false);
-    expect(await isAuthorized("Bearer x", undefined)).toBe(false);
-    expect(await isAuthorized(undefined, undefined)).toBe(false);
-  });
-});
 
 describe("health", () => {
   it("health on empty index reports stale", async () => {
@@ -95,6 +74,10 @@ describe("admin refresh", () => {
     expect((await post("/admin/refresh")).status).toBe(401);
     expect((await post("/admin/refresh", { Authorization: "Bearer nope" })).status).toBe(401);
     expect((await post("/admin/refresh", { Authorization: "test-admin-token" })).status).toBe(401);
+    expect((await post("/admin/refresh", { Authorization: "Bearer test-admin-toke" })).status).toBe(401);
+    expect((await post("/admin/refresh", { Authorization: "Bearer test-admin-token2" })).status).toBe(401);
+    const r = await post("/admin/refresh", { Authorization: "Bearer nope" });
+    expect(r.headers.get("WWW-Authenticate")).toContain("Bearer");
   });
 
   it("rejects everything when ADMIN_TOKEN is unset or empty", async () => {
