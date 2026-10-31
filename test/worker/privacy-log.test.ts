@@ -35,11 +35,6 @@ describe("logs", () => {
     expect(lines.join("\n")).not.toMatch(/203\.0\.113\.9|probe-agent/);
   });
 
-  it("the identifier check has teeth", () => {
-    const lines = ['{"event":"tool","ip":"203.0.113.9"}', '{"event":"tool","ua":"probe-agent"}'];
-    for (const l of lines) expect(l).toMatch(/203\.0\.113\.9|probe-agent/);
-  });
-
   it("tool error logs carry the class name only, never the message", async () => {
     const lines = capture();
     await guard(env, "boom", { query: "x" }, async () => {

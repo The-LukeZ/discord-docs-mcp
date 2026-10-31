@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import corpus from "../fixtures/corpus.json";
 import { runRefresh, type RunSummary, type StepRunner } from "../../src/refresh/run";
-import { getPage, getPageSections, getSnapshotInfo } from "../../src/store/read";
+import { getPage, getPageSections, getSnapshotInfo, resolveRedirect } from "../../src/store/read";
 import { FakeGitHub } from "./fake-github";
 
 const db = env.DB;
@@ -190,6 +190,27 @@ describe("runRefresh", () => {
     expect(rawCalls()).toEqual([`raw:${sha}:docs.json`]);
     expect(s).toMatchObject({ outcome: "published", filesChanged: 1, sectionsAdded: 0, sectionsModified: 0, sectionsRemoved: 0 });
     expect((await getPage(db, await current(), "platform/bots"))!.breadcrumb).toContain("App Basics");
+  });
+
+  it("redirect-only docs.json change updates the redirect in the new snapshot", { timeout: SLOW }, async () => {
+    await baseline();
+    const redirectRows = async () =>
+      (await db.prepare("SELECT source, destination FROM redirects WHERE snapshot_id = ?1 ORDER BY source").bind(await current()).all<{ source: string; destination: string }>()).results;
+    const before = await redirectRows();
+    const docs = JSON.parse(all["docs.json"]) as { redirects: Array<{ source: string; destination: string }> };
+    const target = docs.redirects.find((r) => r.source === "/developers/index")!;
+    expect(target.destination).toBe("/developers/intro");
+    target.destination = "/developers/platform/bots"; // navigation and pages stay untouched
+    const sha = gh.commit({ "docs.json": JSON.stringify(docs, null, 2) });
+    gh.calls.length = 0;
+    const s = await runRefresh(deps, { runId: "r2", force: false }, direct);
+    expect(rawCalls()).toEqual([`raw:${sha}:docs.json`]);
+    expect(s).toMatchObject({ outcome: "published", filesChanged: 1, sectionsAdded: 0, sectionsModified: 0, sectionsRemoved: 0 });
+    const after = await redirectRows();
+    expect(after).toHaveLength(before.length);
+    const changed = after.filter((r, i) => r.destination !== before[i]!.destination);
+    expect(changed).toEqual([{ source: expect.stringContaining("index"), destination: "platform/bots" }]);
+    expect(await resolveRedirect(db, await current(), changed[0]!.source)).toBe("platform/bots");
   });
 
   it("removed page is gone from the new snapshot and its sections are recorded as removed", { timeout: SLOW }, async () => {
