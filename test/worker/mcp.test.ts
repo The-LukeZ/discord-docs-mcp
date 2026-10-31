@@ -3,7 +3,7 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { readConfig } from "../../src/config";
 import { createApp } from "../../src/http/app";
-import { guard } from "../../src/mcp/server";
+import { CACHE_VERSION, guard, toolCacheUrl } from "../../src/mcp/server";
 import { recentChangesTool } from "../../src/mcp/tools";
 import { indexCorpus } from "./corpus-index";
 import { callTool, callToolRaw, initialize, listTools, type McpToolResult } from "./mcp-client";
@@ -155,6 +155,18 @@ describe("cache", () => {
     const r = await callTool("search_docs", { query: `Get Channel nocache ${uniq("n")}` });
     expect(r.isError ?? false).toBe(false);
     expect(r.content[0].text).toContain("indexed_commit");
+  });
+});
+
+describe("toolCacheUrl", () => {
+  const sha = "a".repeat(40);
+  it("never shares a key across snapshot ids or cache versions", () => {
+    const a = toolCacheUrl({ commitSha: sha, id: "snap-1" }, "search_docs", "d1g3st");
+    const b = toolCacheUrl({ commitSha: sha, id: "snap-2" }, "search_docs", "d1g3st");
+    const c = toolCacheUrl({ commitSha: sha, id: "snap-1" }, "search_docs", "d1g3st", CACHE_VERSION + "x");
+    expect(new Set([a, b, c]).size).toBe(3);
+    expect(a).toBe(toolCacheUrl({ commitSha: sha, id: "snap-1" }, "search_docs", "d1g3st"));
+    expect(() => new URL(a)).not.toThrow();
   });
 });
 

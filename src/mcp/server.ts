@@ -9,6 +9,22 @@ import { getSectionTool, lookupEndpointTool, lookupEnumTool, lookupObjectTool, r
 
 const GENERIC_ERROR = "Internal error. Please try again later.";
 const CACHE_TTL_SECONDS = 86_400;
+/** Bump when tool output formatting changes, so entries cached by older code are never served. */
+export const CACHE_VERSION = "v1";
+
+/**
+ * Cache key URL: https://cache.internal/<commitSha>/<snapshotId>/<version>/<tool>/<argsDigest>.
+ * The snapshot id keeps two snapshots of the same commit apart; the version isolates code changes.
+ */
+export function toolCacheUrl(
+  info: { commitSha: string; id: string },
+  tool: string,
+  digest: string,
+  version: string = CACHE_VERSION,
+): string {
+  const seg = encodeURIComponent;
+  return `https://cache.internal/${seg(info.commitSha)}/${seg(info.id)}/${seg(version)}/${seg(tool)}/${digest}`;
+}
 
 /** Recursively sort object keys and trim strings, so equivalent argument objects serialize identically. */
 function normalize(v: unknown): unknown {
@@ -68,7 +84,7 @@ export async function guard(
         const info = await getSnapshotInfo(env.DB, new Date(), cfg.staleAfterHours);
         if (info && !info.stale) {
           const digest = await sha256Hex(JSON.stringify(normalize(args)));
-          cacheKey = new Request(`https://cache.internal/${info.commitSha}/${tool}/${digest}`);
+          cacheKey = new Request(toolCacheUrl(info, tool, digest));
         }
       } catch (e) {
         log("cache_error", { tool, op: "key", errorClass: errorClass(e) });
