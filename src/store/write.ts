@@ -264,3 +264,76 @@ export async function cleanup(db: D1Database, now: Date): Promise<void> {
   s.push(db.prepare("DELETE FROM change_records WHERE date < ?1").bind(new Date(now.getTime() - CHANGE_RETENTION_MS).toISOString()));
   await runBatched(db, s);
 }
+
+/** One `runs` row (see migrations). Booleans are stored as 0/1, `problems` as a JSON array. */
+export interface RunRecord {
+  id: string;
+  startedAt: string;
+  finishedAt: string | null;
+  commitSha: string | null;
+  baseSnapshot: number | null;
+  newSnapshot: number | null;
+  baseline: boolean;
+  forced: boolean;
+  outcome: string;
+  filesChanged: number;
+  sectionsAdded: number;
+  sectionsModified: number;
+  sectionsRemoved: number;
+  durationMs: number | null;
+  problems: string[];
+}
+
+/** Insert or replace a refresh run's row (a run's row is rewritten as it progresses). */
+export async function writeRun(db: D1Database, r: RunRecord): Promise<void> {
+  await db
+    .prepare(
+      `INSERT OR REPLACE INTO runs (id, started_at, finished_at, commit_sha, base_snapshot, new_snapshot, baseline, forced, outcome,
+         files_changed, sections_added, sections_modified, sections_removed, duration_ms, problems)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)`,
+    )
+    .bind(
+      r.id, r.startedAt, r.finishedAt, r.commitSha, r.baseSnapshot, r.newSnapshot, r.baseline ? 1 : 0, r.forced ? 1 : 0, r.outcome,
+      r.filesChanged, r.sectionsAdded, r.sectionsModified, r.sectionsRemoved, r.durationMs, JSON.stringify(r.problems),
+    )
+    .run();
+}
+
+export interface ChangeRecordInput {
+  sectionId: string;
+  heading: string;
+  url: string;
+  changeType: "added" | "modified" | "removed";
+}
+
+/** Rows per multi-row change_records INSERT: 7 bound parameters each stays under D1's 100. */
+const CHANGE_ROWS_PER_INSERT = 14;
+
+/** Replace the change records of a run (re-runnable: the run's earlier rows are removed first). */
+export async function writeChangeRecords(db: D1Database, runId: string, commitSha: string, date: string, records: ChangeRecordInput[]): Promise<void> {
+  const s: D1PreparedStatement[] = [db.prepare("DELETE FROM change_records WHERE run_id = ?1").bind(runId)];
+  for (const part of chunks(records, CHANGE_ROWS_PER_INSERT)) {
+    const values = part.map((_, i) => `(${placeholders(i * 7 + 1, 7)})`).join(", ");
+    const bind = part.flatMap((r) => [runId, commitSha, date, r.sectionId, r.heading, r.url, r.changeType]);
+    s.push(db.prepare(`INSERT INTO change_records (run_id, commit_sha, date, section_id, heading, url, change_type) VALUES ${values}`).bind(...bind));
+  }
+  await runBatched(db, s);
+}
+
+/**
+ * Record the outcome of the latest run in `refresh_state`. `success` also sets `last_success_at` (a no-op run
+ * confirms the index is current, so it counts as a success for staleness). Never touches `current_snapshot`.
+ */
+export async function recordRunState(db: D1Database, outcome: string, at: string, success: boolean): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE refresh_state SET last_run_at = ?1, last_run_outcome = ?2, last_success_at = CASE WHEN ?3 THEN ?1 ELSE last_success_at END WHERE id = 1`,
+    )
+    .bind(at, outcome, success ? 1 : 0)
+    .run();
+}
+
+/** Mark a snapshot that is still being built as failed (cleanup removes it). Never touches a live snapshot. */
+export async function markSnapshotFailed(db: D1Database, id: number): Promise<void> {
+  await db.prepare("UPDATE snapshots SET status = 'failed' WHERE id = ?1 AND status = 'building'").bind(id).run();
+}
