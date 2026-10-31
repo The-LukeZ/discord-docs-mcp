@@ -9,3 +9,12 @@ it("applies schema with FTS5 and a seeded refresh_state row", async () => {
   const st = await env.DB.prepare("SELECT * FROM refresh_state").first();
   expect(st).toMatchObject({ id: 1, current_snapshot: null });
 });
+
+it("indexes sections by snapshot and area, and the area subquery uses it", async () => {
+  const plan = await env.DB.prepare(
+    "EXPLAIN QUERY PLAN SELECT id FROM sections WHERE snapshot_id = ?1 AND area = ?2",
+  )
+    .bind(1, "topics")
+    .all<{ detail: string }>();
+  expect(plan.results.map((r) => r.detail).join("\n")).toContain("idx_sections_area");
+});
