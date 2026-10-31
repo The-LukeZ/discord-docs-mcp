@@ -1,6 +1,6 @@
 {
   "name": "discord-docs",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Search and read Discord's developer docs via MCP",
   "author": { "name": "The-LukeZ" },
   "license": "MIT",
