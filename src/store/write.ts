@@ -72,14 +72,25 @@ async function deletePages(db: D1Database, snapshotId: number, paths: string[]):
   for (const chunk of chunks(paths, PATH_CHUNK)) await db.batch(deletePageStatements(db, snapshotId, chunk));
 }
 
-/** Trailing footnote marker of a docs table cell (`ADMINISTRATOR *`, `FOO†`). */
-const KEY_MARKER = /[\s*†‡§]+$/u;
+/** Trailing footnote marker characters of a docs table cell (`ADMINISTRATOR *`, `FOO†`). */
+const KEY_MARKER_CHARS = new Set(["*", "†", "‡", "§"]);
+
+/** Longest cell considered for a lookup key; real keys are far shorter. */
+const KEY_MAX_CHARS = 200;
+
+/** Strip trailing whitespace and footnote markers in one linear pass (no regex backtracking). */
+function stripKeyMarker(cell: string): string {
+  const s = cell.slice(0, KEY_MAX_CHARS);
+  let end = s.length;
+  while (end > 0 && (KEY_MARKER_CHARS.has(s[end - 1]!) || /\s/u.test(s[end - 1]!))) end--;
+  return s.slice(0, end);
+}
 
 /** Enum lookup key per row: the "name"-like column when there is one, else the first column, without footnote markers. */
 function enumKeys(e: ParsedEnum): string[] {
   const lower = e.columns.map((c) => c.toLowerCase());
   const idx = Math.max(0, lower.findIndex((c) => ["name", "key", "flag", "permission"].includes(c)));
-  return e.rows.map((r) => (r[idx] ?? "").replace(KEY_MARKER, "")).filter((k) => k !== "");
+  return e.rows.map((r) => stripKeyMarker(r[idx] ?? "")).filter((k) => k !== "");
 }
 
 /**
